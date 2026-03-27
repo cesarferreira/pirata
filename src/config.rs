@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
-use directories::{BaseDirs, ProjectDirs};
+use directories::{BaseDirs, ProjectDirs, UserDirs};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::fs;
@@ -15,6 +15,8 @@ use crate::model::{DownloaderKind, IndexerKind};
 pub struct AppConfig {
     #[serde(default)]
     pub defaults: DefaultsConfig,
+    #[serde(default)]
+    pub aria2: Aria2Config,
     #[serde(default)]
     pub transmission: TransmissionConfig,
     #[serde(default)]
@@ -38,6 +40,28 @@ impl Default for DefaultsConfig {
             downloader: default_downloader(),
             search_limit: default_limit(),
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Aria2Config {
+    pub download_dir: Option<String>,
+}
+
+impl Default for Aria2Config {
+    fn default() -> Self {
+        Self {
+            download_dir: default_user_download_dir(),
+        }
+    }
+}
+
+impl Aria2Config {
+    pub fn download_target_display(&self) -> String {
+        self.download_dir
+            .clone()
+            .or_else(default_user_download_dir)
+            .unwrap_or_else(|| "current working directory".to_string())
     }
 }
 
@@ -136,7 +160,7 @@ fn default_indexer() -> IndexerKind {
 }
 
 fn default_downloader() -> DownloaderKind {
-    DownloaderKind::Transmission
+    DownloaderKind::Aria2
 }
 
 fn default_limit() -> usize {
@@ -159,6 +183,11 @@ fn transmission_default_download_dir() -> Option<String> {
     transmission_settings_candidates()
         .into_iter()
         .find_map(|path| read_transmission_download_dir(&path))
+}
+
+fn default_user_download_dir() -> Option<String> {
+    UserDirs::new()
+        .and_then(|dirs| dirs.download_dir().map(|path| path.display().to_string()))
 }
 
 fn transmission_settings_candidates() -> Vec<PathBuf> {
@@ -220,9 +249,9 @@ mod tests {
     use crate::model::DownloaderKind;
 
     #[test]
-    fn defaults_to_transmission_downloader() {
+    fn defaults_to_aria2_downloader() {
         let config = AppConfig::default();
 
-        assert_eq!(config.defaults.downloader, DownloaderKind::Transmission);
+        assert_eq!(config.defaults.downloader, DownloaderKind::Aria2);
     }
 }

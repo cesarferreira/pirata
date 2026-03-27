@@ -23,9 +23,9 @@ impl fmt::Display for IndexerKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum DownloaderKind {
-    #[default]
     Transmission,
     Qbittorrent,
+    #[default]
     Aria2,
     System,
 }
