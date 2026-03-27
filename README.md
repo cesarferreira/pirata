@@ -48,6 +48,8 @@ cargo run -- search "ubuntu 24.04" --interactive
 cargo run -- search "ubuntu 24.04" --json
 ```
 
+With Transmission client mode set to `cli`, `search --interactive`, `add`, and `lucky` stream `transmission-cli` output in the terminal and wait for the download to finish.
+
 ## Info and Magnet
 
 ```bash
@@ -89,6 +91,8 @@ cargo run -- tui
 cargo run -- tui ubuntu
 cargo run -- tui "ubuntu 24.04" --sort seeders
 ```
+
+Downloads started inside the TUI have live progress in the dashboard.
 
 Keys:
 
