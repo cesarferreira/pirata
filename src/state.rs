@@ -18,6 +18,12 @@ pub struct DetachedDownloadRecord {
     pub download_dir: Option<String>,
 }
 
+impl DetachedDownloadRecord {
+    pub fn key(&self) -> (u32, u64) {
+        (self.pid, self.started_unix_secs)
+    }
+}
+
 pub fn record_detached_download(
     torrent: &Torrent,
     pid: u32,

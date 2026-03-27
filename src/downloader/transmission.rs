@@ -1,4 +1,4 @@
-use std::io::{BufReader, Read};
+use std::io::{self, BufReader, Read, Write};
 use std::process::Stdio;
 use std::sync::mpsc::{self, Sender};
 use std::thread;
@@ -135,11 +135,19 @@ impl TransmissionDownloader {
         Ok(child.id())
     }
 
-    fn run_via_standalone_cli_foreground(&self, magnet: &str) -> Result<()> {
+    fn run_via_standalone_cli_foreground(&self, torrent: &Torrent, magnet: &str) -> Result<()> {
         ensure_transmission_cli_available()?;
 
         let mut command = self.foreground_transmission_command(magnet);
-        println!("Starting transmission-cli...");
+        let mut active_status_line = false;
+        println!(
+            "Downloading '{}' to {} | listed seeders {} | listed leechers {}",
+            torrent.name,
+            self.config.download_target_display(),
+            torrent.seeders,
+            torrent.leechers
+        );
+        render_status_line("Starting transmission-cli...", &mut active_status_line)?;
 
         let mut child = command
             .spawn()
@@ -161,21 +169,22 @@ impl TransmissionDownloader {
         let mut last_line = String::new();
         let mut last_visible_update = Instant::now();
         let started_at = Instant::now();
-        let mut saw_progress_output = false;
+        let mut last_progress_line: Option<String> = None;
 
         loop {
             while let Ok(line) = receiver.try_recv() {
                 match classify_cli_line(&line) {
                     CliLine::Ignore => {}
                     CliLine::Display(rendered) => {
-                        saw_progress_output = true;
+                        last_progress_line = Some(rendered.clone());
                         if rendered != last_line {
-                            println!("{rendered}");
+                            render_status_line(&rendered, &mut active_status_line)?;
                             last_line = rendered;
                             last_visible_update = Instant::now();
                         }
                     }
                     CliLine::Complete(rendered) => {
+                        finish_status_line(&mut active_status_line)?;
                         println!("{rendered}");
                         stopped_after_completion = true;
                     }
@@ -192,6 +201,7 @@ impl TransmissionDownloader {
                 .try_wait()
                 .context("failed to read transmission-cli status")?
             {
+                finish_status_line(&mut active_status_line)?;
                 return if status.success() {
                     Ok(())
                 } else {
@@ -203,14 +213,15 @@ impl TransmissionDownloader {
                 Ok(line) => match classify_cli_line(&line) {
                     CliLine::Ignore => {}
                     CliLine::Display(rendered) => {
-                        saw_progress_output = true;
+                        last_progress_line = Some(rendered.clone());
                         if rendered != last_line {
-                            println!("{rendered}");
+                            render_status_line(&rendered, &mut active_status_line)?;
                             last_line = rendered;
                             last_visible_update = Instant::now();
                         }
                     }
                     CliLine::Complete(rendered) => {
+                        finish_status_line(&mut active_status_line)?;
                         println!("{rendered}");
                         stopped_after_completion = true;
                     }
@@ -220,13 +231,12 @@ impl TransmissionDownloader {
             }
 
             if last_visible_update.elapsed() >= Duration::from_secs(2) && !stopped_after_completion {
-                let message = if saw_progress_output {
-                    format!("Still downloading... {}s elapsed", started_at.elapsed().as_secs())
-                } else {
-                    format!("Connecting to peers... {}s elapsed", started_at.elapsed().as_secs())
-                };
+                let message = idle_status_line(
+                    last_progress_line.as_deref(),
+                    started_at.elapsed().as_secs(),
+                );
                 if message != last_line {
-                    println!("{message}");
+                    render_status_line(&message, &mut active_status_line)?;
                     last_line = message;
                 }
                 last_visible_update = Instant::now();
@@ -275,7 +285,7 @@ impl Downloader for TransmissionDownloader {
         let magnet = torrent.resolved_magnet();
 
         match self.config.client {
-            TransmissionClient::Cli => self.run_via_standalone_cli_foreground(&magnet),
+            TransmissionClient::Cli => self.run_via_standalone_cli_foreground(torrent, &magnet),
             TransmissionClient::Rpc => match self.add_via_rpc(&magnet).await {
                 Ok(()) => Ok(()),
                 Err(rpc_error) => self.add_via_cli(&magnet).await.map_err(|remote_error| {
@@ -284,7 +294,7 @@ impl Downloader for TransmissionDownloader {
                     )
                 }),
             },
-            TransmissionClient::Auto => match self.run_via_standalone_cli_foreground(&magnet) {
+            TransmissionClient::Auto => match self.run_via_standalone_cli_foreground(torrent, &magnet) {
                 Ok(()) => Ok(()),
                 Err(cli_error) => match self.add_via_rpc(&magnet).await {
                     Ok(()) => Ok(()),
@@ -424,7 +434,10 @@ fn classify_cli_line(line: &str) -> CliLine {
 }
 
 fn is_transmission_noise(line: &str) -> bool {
-    line.starts_with('[')
+    line.starts_with("transmission-cli ")
+        || line == "^D"
+        || line.starts_with("^D")
+        || line.starts_with('[')
         && [
             "web.cc:",
             "rpc-server.cc:",
@@ -444,7 +457,7 @@ fn is_completion_marker(line: &str) -> bool {
 
 fn cleaned_progress_line(line: &str) -> Option<String> {
     if let Some(index) = line.find("Progress:") {
-        return Some(line[index..].to_string());
+        return Some(format_progress_line(&line[index..]));
     }
 
     if line.starts_with("Downloading")
@@ -459,14 +472,113 @@ fn cleaned_progress_line(line: &str) -> Option<String> {
     None
 }
 
+fn matches_zero_peers(line: Option<&str>) -> bool {
+    let Some(line) = line else {
+        return false;
+    };
+    line.contains("dl from 0 of 0 peer")
+        || line.contains("dl from 0 of 0 peers")
+        || line.contains("peers 0 of 0 peer")
+        || line.contains("peers 0 of 0 peers")
+}
+
+fn format_progress_line(line: &str) -> String {
+    let body = line.strip_prefix("Progress:").unwrap_or(line).trim();
+    let parts: Vec<&str> = body.split(", ").collect();
+    if parts.len() < 3 {
+        return line.to_string();
+    }
+
+    let percent = parts[0].trim();
+    let peer_info = strip_suffix_from(
+        parts[1].trim().strip_prefix("dl from ").unwrap_or(parts[1].trim()),
+        " (",
+    );
+    let down_speed = extract_parenthesized(parts[1]).unwrap_or("?");
+    let up_peers = strip_suffix_from(
+        parts[2]
+            .trim()
+            .strip_prefix("ul to ")
+            .unwrap_or(parts[2].trim()),
+        " (",
+    );
+    let up_speed = extract_parenthesized(parts[2]).unwrap_or("?");
+    let eta = extract_eta(body).unwrap_or("unknown");
+
+    format!(
+        "Progress {percent} | peers {peer_info} | down {down_speed} | up {up_speed} to {up_peers} | eta {eta}"
+    )
+}
+
+fn extract_parenthesized(part: &str) -> Option<&str> {
+    let start = part.find('(')?;
+    let end = part[start + 1..].find(')')?;
+    Some(&part[start + 1..start + 1 + end])
+}
+
+fn extract_eta(line: &str) -> Option<&str> {
+    let start = line.rfind('[')?;
+    let end = line[start + 1..].find(']')?;
+    Some(&line[start + 1..start + 1 + end])
+}
+
+fn strip_suffix_from<'a>(value: &'a str, needle: &str) -> &'a str {
+    value.split_once(needle).map_or(value, |(prefix, _)| prefix)
+}
+
+fn idle_status_line(last_progress_line: Option<&str>, elapsed_secs: u64) -> String {
+    let elapsed = format_elapsed(elapsed_secs);
+    match last_progress_line {
+        Some(line) if matches_zero_peers(Some(line)) => {
+            format!("{line} | waiting for peers | {elapsed} elapsed")
+        }
+        Some(line) => format!("{line} | no new update for {elapsed}"),
+        None => format!("Connecting to peers... {elapsed} elapsed"),
+    }
+}
+
+fn format_elapsed(elapsed_secs: u64) -> String {
+    let hours = elapsed_secs / 3600;
+    let minutes = (elapsed_secs % 3600) / 60;
+    let seconds = elapsed_secs % 60;
+
+    if hours > 0 {
+        format!("{hours}h {minutes:02}m")
+    } else if minutes > 0 {
+        format!("{minutes}m {seconds:02}s")
+    } else {
+        format!("{seconds}s")
+    }
+}
+
 fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
+}
+
+fn render_status_line(message: &str, active_status_line: &mut bool) -> Result<()> {
+    let mut stdout = io::stdout().lock();
+    write!(stdout, "\r\x1b[2K{message}")?;
+    stdout.flush()?;
+    *active_status_line = true;
+    Ok(())
+}
+
+fn finish_status_line(active_status_line: &mut bool) -> Result<()> {
+    if *active_status_line {
+        let mut stdout = io::stdout().lock();
+        writeln!(stdout)?;
+        stdout.flush()?;
+        *active_status_line = false;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::{
-        CliLine, classify_cli_line, is_completion_marker, is_transmission_noise, shell_quote,
+        CliLine, classify_cli_line, extract_eta, format_elapsed, format_progress_line,
+        idle_status_line, is_completion_marker, is_transmission_noise, matches_zero_peers,
+        shell_quote,
     };
 
     #[test]
@@ -474,6 +586,8 @@ mod tests {
         assert!(is_transmission_noise(
             "[2026-03-27 18:04:12.262] rpc-server.cc:923: Serving RPC and Web requests"
         ));
+        assert!(is_transmission_noise("transmission-cli 4.0.6 (38c164933e)"));
+        assert!(is_transmission_noise("^Dtransmission-cli 4.0.6 (38c164933e)"));
         assert!(!is_transmission_noise("Progress: 12.5%"));
     }
 
@@ -499,5 +613,57 @@ mod tests {
     fn quotes_shell_arguments() {
         assert_eq!(shell_quote("abc"), "'abc'");
         assert_eq!(shell_quote("a'b"), "'a'\"'\"'b'");
+    }
+
+    #[test]
+    fn detects_zero_peer_progress() {
+        assert!(matches_zero_peers(Some(
+            "Progress: 0.0%, dl from 0 of 0 peers (0 kB/s), ul to 0 (0 kB/s) [None]"
+        )));
+        assert!(!matches_zero_peers(Some(
+            "Progress: 12.0%, dl from 2 of 8 peers (120 kB/s), ul to 0 (0 kB/s) [None]"
+        )));
+    }
+
+    #[test]
+    fn formats_idle_status_from_last_progress() {
+        assert_eq!(
+            idle_status_line(
+                Some("Progress 0.0% | peers 0 of 0 peers | down 0 kB/s | up 0 kB/s to 0 | eta None"),
+                90
+            ),
+            "Progress 0.0% | peers 0 of 0 peers | down 0 kB/s | up 0 kB/s to 0 | eta None | waiting for peers | 1m 30s elapsed"
+        );
+        assert_eq!(
+            idle_status_line(Some("Progress 12.0% | peers 2 of 8 peers | down 120 kB/s | up 0 kB/s to 0 | eta 4m"), 12),
+            "Progress 12.0% | peers 2 of 8 peers | down 120 kB/s | up 0 kB/s to 0 | eta 4m | no new update for 12s"
+        );
+    }
+
+    #[test]
+    fn formats_elapsed_durations() {
+        assert_eq!(format_elapsed(8), "8s");
+        assert_eq!(format_elapsed(100), "1m 40s");
+        assert_eq!(format_elapsed(3723), "1h 02m");
+    }
+
+    #[test]
+    fn extracts_eta_from_progress_line() {
+        assert_eq!(
+            extract_eta("Progress: 15.0%, dl from 2 of 8 peers (120 kB/s), ul to 0 (0 kB/s) [4m 12s]"),
+            Some("4m 12s")
+        );
+        assert_eq!(
+            extract_eta("Progress: 0.0%, dl from 0 of 0 peers (0 kB/s), ul to 0 (0 kB/s) [None]"),
+            Some("None")
+        );
+    }
+
+    #[test]
+    fn formats_progress_line_with_eta_and_speeds() {
+        assert_eq!(
+            format_progress_line("Progress: 15.0%, dl from 2 of 8 peers (120 kB/s), ul to 1 (4 kB/s) [4m 12s]"),
+            "Progress 15.0% | peers 2 of 8 peers | down 120 kB/s | up 4 kB/s to 1 | eta 4m 12s"
+        );
     }
 }

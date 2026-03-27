@@ -129,6 +129,9 @@ where
                 download.drain_events();
                 download.poll_child()?;
             }
+            if self.tick % 10 == 0 {
+                self.refresh_detached_downloads()?;
+            }
 
             terminal.draw(|frame| self.draw(frame))?;
 
@@ -141,6 +144,36 @@ where
                     continue;
                 }
                 self.handle_key(key.code)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn refresh_detached_downloads(&mut self) -> Result<()> {
+        let detached_downloads = load_recent_detached_downloads(24)?;
+        let mut appended = 0;
+
+        for record in detached_downloads.into_iter().rev() {
+            let key = record.key();
+            let already_present = self
+                .downloads
+                .iter()
+                .any(|download| download.detached_key() == Some(key));
+            if already_present {
+                continue;
+            }
+            self.downloads.push(DownloadSession::from_detached_record(record));
+            appended += 1;
+        }
+
+        if appended > 0 {
+            self.status_message = format!(
+                "Detected {appended} new external download{}.",
+                if appended == 1 { "" } else { "s" }
+            );
+            if self.selected_download >= self.downloads.len() {
+                self.selected_download = self.downloads.len().saturating_sub(1);
             }
         }
 
@@ -423,7 +456,7 @@ where
                         let name = download.torrent.name.clone();
                         download.abort()?;
                         self.status_message = format!("Aborted '{name}'.");
-                    } else if matches!(download.tracking, DownloadTracking::Detached) {
+                    } else if matches!(download.tracking, DownloadTracking::Detached { .. }) {
                         self.status_message =
                             "That row was started outside the TUI and cannot be stopped here."
                                 .to_string();
@@ -625,6 +658,10 @@ impl DownloadSession {
         let (child, receiver) = spawn_transmission_cli(&torrent, config)?;
         let mut logs = VecDeque::new();
         logs.push_back("Started transmission-cli".to_string());
+        logs.push_back(format!(
+            "Downloading to {}",
+            config.download_target_display()
+        ));
 
         Ok(Self {
             torrent,
@@ -640,6 +677,7 @@ impl DownloadSession {
     }
 
     fn from_detached_record(record: DetachedDownloadRecord) -> Self {
+        let key = record.key();
         let elapsed = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
@@ -650,9 +688,12 @@ impl DownloadSession {
             "Detached transmission-cli launch (pid {}) started outside the TUI.",
             record.pid
         ));
-        if let Some(download_dir) = record.download_dir.as_deref() {
-            logs.push_back(format!("Download dir: {download_dir}"));
-        }
+        logs.push_back(format!(
+            "Downloading to {}",
+            record
+                .download_dir
+                .unwrap_or_else(|| "Transmission default download directory".to_string())
+        ));
         logs.push_back(
             "Live progress is only available for downloads started from inside this TUI session."
                 .to_string(),
@@ -660,7 +701,7 @@ impl DownloadSession {
 
         Self {
             torrent: record.torrent,
-            tracking: DownloadTracking::Detached,
+            tracking: DownloadTracking::Detached { key },
             child: None,
             receiver: None,
             logs,
@@ -719,7 +760,7 @@ impl DownloadSession {
     }
 
     fn abort(&mut self) -> Result<()> {
-        if matches!(self.tracking, DownloadTracking::Detached) {
+        if matches!(self.tracking, DownloadTracking::Detached { .. }) {
             self.status_text = "Detached download cannot be controlled from this TUI.".to_string();
             self.push_log("This row was loaded from saved state and cannot be aborted here.".to_string());
             return Ok(());
@@ -744,10 +785,17 @@ impl DownloadSession {
         matches!(self.tracking, DownloadTracking::Managed) && !self.is_finished()
     }
 
+    fn detached_key(&self) -> Option<(u32, u64)> {
+        match self.tracking {
+            DownloadTracking::Managed => None,
+            DownloadTracking::Detached { key } => Some(key),
+        }
+    }
+
     fn progress_ratio(&self, tick: usize) -> f64 {
         if let Some(progress) = self.progress {
             progress
-        } else if matches!(self.tracking, DownloadTracking::Detached) {
+        } else if matches!(self.tracking, DownloadTracking::Detached { .. }) {
             0.18
         } else if self.is_finished() {
             1.0
@@ -764,7 +812,7 @@ impl DownloadSession {
     fn progress_label(&self, tick: usize) -> String {
         if let Some(progress) = self.progress {
             format!("{:.1}% | {}", progress * 100.0, self.status_text)
-        } else if matches!(self.tracking, DownloadTracking::Detached) {
+        } else if matches!(self.tracking, DownloadTracking::Detached { .. }) {
             self.status_text.clone()
         } else if self.is_finished() {
             self.status_text.clone()
@@ -781,7 +829,7 @@ impl DownloadSession {
     fn progress_summary(&self, tick: usize) -> String {
         if let Some(progress) = self.progress {
             format!("{:>5.1}%", progress * 100.0)
-        } else if matches!(self.tracking, DownloadTracking::Detached) {
+        } else if matches!(self.tracking, DownloadTracking::Detached { .. }) {
             " ext ".to_string()
         } else if self.is_finished() {
             "100.0%".to_string()
@@ -792,7 +840,7 @@ impl DownloadSession {
     }
 
     fn status_badge(&self, tick: usize) -> Span<'static> {
-        if matches!(self.tracking, DownloadTracking::Detached) {
+        if matches!(self.tracking, DownloadTracking::Detached { .. }) {
             return Span::styled(" ext ", Style::default().fg(Color::Black).bg(Color::Blue));
         }
 
@@ -839,7 +887,7 @@ enum DownloadOutcome {
 
 enum DownloadTracking {
     Managed,
-    Detached,
+    Detached { key: (u32, u64) },
 }
 
 enum DownloadEvent {
