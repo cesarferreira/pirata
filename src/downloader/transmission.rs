@@ -8,6 +8,7 @@ use tokio::process::Command;
 
 use crate::config::TransmissionConfig;
 use crate::downloader::Downloader;
+use crate::util::ensure_transmission_cli_available;
 
 #[derive(Debug, Clone)]
 pub struct TransmissionDownloader {
@@ -111,6 +112,8 @@ impl TransmissionDownloader {
     }
 
     fn add_via_standalone_cli(&self, magnet: &str) -> Result<()> {
+        ensure_transmission_cli_available()?;
+
         let mut command = std::process::Command::new("transmission-cli");
         command.stdin(Stdio::null());
         command.stdout(Stdio::null());
@@ -122,7 +125,7 @@ impl TransmissionDownloader {
         command.arg(magnet);
 
         command.spawn().context(
-            "failed to start standalone transmission-cli fallback; install transmission-cli or configure a Transmission daemon",
+            "failed to start standalone transmission-cli fallback",
         )?;
         Ok(())
     }

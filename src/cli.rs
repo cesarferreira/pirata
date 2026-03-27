@@ -38,6 +38,9 @@ pub enum Commands {
     Magnet(IdArgs),
     Add(IdArgs),
     Lucky(LuckyArgs),
+    Tui(TuiArgs),
+    Doctor,
+    Setup(SetupArgs),
 }
 
 #[derive(Debug, Args)]
@@ -71,4 +74,19 @@ pub struct LuckyArgs {
     pub min_size: Option<String>,
     #[arg(long)]
     pub max_size: Option<String>,
+}
+
+#[derive(Debug, Args)]
+pub struct TuiArgs {
+    pub query: String,
+    #[arg(long)]
+    pub limit: Option<usize>,
+    #[arg(long, value_enum, default_value_t = SearchSort::Seeders)]
+    pub sort: SearchSort,
+}
+
+#[derive(Debug, Args)]
+pub struct SetupArgs {
+    #[arg(long)]
+    pub download_dir: Option<PathBuf>,
 }

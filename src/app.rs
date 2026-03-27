@@ -1,10 +1,12 @@
+use std::path::PathBuf;
+
 use anyhow::{Result, anyhow, bail};
 use dialoguer::{FuzzySelect, theme::ColorfulTheme};
 use serde::Serialize;
 
 use crate::cache::SearchCache;
-use crate::cli::{Cli, Commands, LuckyArgs, SearchArgs};
-use crate::config::AppConfig;
+use crate::cli::{Cli, Commands, LuckyArgs, SearchArgs, SetupArgs, TuiArgs};
+use crate::config::{AppConfig, default_config_path};
 use crate::downloader::Downloader;
 use crate::downloader::system::SystemDownloader;
 use crate::downloader::transmission::TransmissionDownloader;
@@ -12,7 +14,8 @@ use crate::indexer::Indexer;
 use crate::indexer::pirate_bay::PirateBayIndexer;
 use crate::model::{DownloaderKind, IndexerKind, SearchSort, Torrent};
 use crate::output::{print_json, print_search_table, print_torrent_info};
-use crate::util::parse_size_filter;
+use crate::tui::run_search_tui;
+use crate::util::{command_exists, parse_size_filter, transmission_cli_missing_message};
 
 #[derive(Debug, Clone)]
 pub struct App {
@@ -25,6 +28,7 @@ impl App {
     }
 
     pub async fn run(&self, cli: Cli) -> Result<()> {
+        let config_path = cli.config.clone();
         let indexer_kind = cli.global.indexer.unwrap_or(self.config.defaults.indexer);
         let downloader_kind = cli
             .global
@@ -102,6 +106,12 @@ impl App {
                 )
                 .await
             }
+            Commands::Tui(args) => {
+                self.handle_tui(indexer_kind, downloader_kind, cli.global.open, cli.global.json, args, limit, &cache)
+                    .await
+            }
+            Commands::Doctor => self.handle_doctor(config_path, cli.global.json),
+            Commands::Setup(args) => self.handle_setup(config_path, cli.global.json, args).await,
         }
     }
 
@@ -243,6 +253,131 @@ impl App {
         Ok(())
     }
 
+    async fn handle_tui(
+        &self,
+        indexer_kind: IndexerKind,
+        _downloader_kind: DownloaderKind,
+        open: bool,
+        json: bool,
+        args: TuiArgs,
+        default_limit: usize,
+        cache: &SearchCache,
+    ) -> Result<()> {
+        if json {
+            bail!("--json is not supported with the tui command");
+        }
+        if open {
+            bail!("--open is not supported with the tui command");
+        }
+
+        let limit = args.limit.unwrap_or(default_limit);
+        let results = self
+            .load_search_results(indexer_kind, &args.query, limit, cache)
+            .await?;
+        let results = sort_results(results, args.sort);
+
+        run_search_tui(args.query, results, self.config.transmission.clone())
+    }
+
+    fn handle_doctor(&self, config_override: Option<PathBuf>, json: bool) -> Result<()> {
+        let config_path = config_override.unwrap_or_else(default_config_path);
+        let default_downloader = self.config.defaults.downloader;
+        let transmission_cli_installed = command_exists("transmission-cli");
+        let transmission_remote_installed = command_exists("transmission-remote");
+        let transmission_daemon_installed = command_exists("transmission-daemon");
+        let gui_warning = matches!(default_downloader, DownloaderKind::System).then_some(
+            "default downloader is system; add/lucky/search --interactive will hand magnets to the OS and may open the Transmission GUI".to_string(),
+        );
+
+        let report = DoctorReport {
+            config_path: config_path.display().to_string(),
+            default_downloader: default_downloader.to_string(),
+            transmission_cli_installed,
+            transmission_remote_installed,
+            transmission_daemon_installed,
+            transmission_cli_hint: (!transmission_cli_installed)
+                .then_some(transmission_cli_missing_message()),
+            gui_warning,
+        };
+
+        if json {
+            print_json(&report)?;
+        } else {
+            println!("Config: {}", report.config_path);
+            println!("Default downloader: {}", report.default_downloader);
+            println!(
+                "transmission-cli: {}",
+                if report.transmission_cli_installed {
+                    "installed"
+                } else {
+                    "missing"
+                }
+            );
+            println!(
+                "transmission-remote: {}",
+                if report.transmission_remote_installed {
+                    "installed"
+                } else {
+                    "missing"
+                }
+            );
+            println!(
+                "transmission-daemon: {}",
+                if report.transmission_daemon_installed {
+                    "installed"
+                } else {
+                    "missing"
+                }
+            );
+            if let Some(hint) = report.transmission_cli_hint {
+                println!("{hint}");
+            }
+            if let Some(warning) = report.gui_warning {
+                println!("{warning}");
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_setup(
+        &self,
+        config_override: Option<PathBuf>,
+        json: bool,
+        args: SetupArgs,
+    ) -> Result<()> {
+        let mut config = self.config.clone();
+        config.defaults.downloader = DownloaderKind::Transmission;
+        if let Some(download_dir) = args.download_dir {
+            config.transmission.download_dir = Some(download_dir.display().to_string());
+        }
+
+        let saved_path = config.save(config_override).await?;
+        let cli_installed = command_exists("transmission-cli");
+        let output = SetupOutput {
+            config_path: saved_path.display().to_string(),
+            default_downloader: config.defaults.downloader.to_string(),
+            download_dir: config.transmission.download_dir.clone(),
+            transmission_cli_installed: cli_installed,
+            transmission_cli_hint: (!cli_installed).then_some(transmission_cli_missing_message()),
+        };
+
+        if json {
+            print_json(&output)?;
+        } else {
+            println!("Wrote config to {}", output.config_path);
+            println!("Default downloader set to {}", output.default_downloader);
+            if let Some(download_dir) = output.download_dir {
+                println!("Transmission download dir: {download_dir}");
+            }
+            if let Some(hint) = output.transmission_cli_hint {
+                println!("{hint}");
+            }
+        }
+
+        Ok(())
+    }
+
     async fn load_search_results(
         &self,
         indexer_kind: IndexerKind,
@@ -340,6 +475,26 @@ struct LuckyOutput {
     downloader: String,
     score: f64,
     torrent: Torrent,
+}
+
+#[derive(Debug, Serialize)]
+struct DoctorReport {
+    config_path: String,
+    default_downloader: String,
+    transmission_cli_installed: bool,
+    transmission_remote_installed: bool,
+    transmission_daemon_installed: bool,
+    transmission_cli_hint: Option<String>,
+    gui_warning: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+struct SetupOutput {
+    config_path: String,
+    default_downloader: String,
+    download_dir: Option<String>,
+    transmission_cli_installed: bool,
+    transmission_cli_hint: Option<String>,
 }
 
 #[derive(Debug)]

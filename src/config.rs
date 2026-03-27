@@ -83,6 +83,21 @@ impl AppConfig {
         }
     }
 
+    pub async fn save(&self, path_override: Option<PathBuf>) -> Result<PathBuf> {
+        let path = path_override.unwrap_or_else(default_config_path);
+        let contents =
+            toml::to_string_pretty(self).context("failed to serialize configuration")?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .await
+                .with_context(|| format!("failed to create {}", parent.display()))?;
+        }
+        fs::write(&path, contents)
+            .await
+            .with_context(|| format!("failed to write {}", path.display()))?;
+        Ok(path)
+    }
+
     pub fn cache_dir(&self) -> Result<PathBuf> {
         let dirs = ProjectDirs::from("dev", "pirate", "pirate-ctl")
             .context("unable to determine cache directory")?;
@@ -106,7 +121,7 @@ fn default_indexer() -> IndexerKind {
 }
 
 fn default_downloader() -> DownloaderKind {
-    DownloaderKind::System
+    DownloaderKind::Transmission
 }
 
 fn default_limit() -> usize {
@@ -127,9 +142,9 @@ mod tests {
     use crate::model::DownloaderKind;
 
     #[test]
-    fn defaults_to_system_downloader() {
+    fn defaults_to_transmission_downloader() {
         let config = AppConfig::default();
 
-        assert_eq!(config.defaults.downloader, DownloaderKind::System);
+        assert_eq!(config.defaults.downloader, DownloaderKind::Transmission);
     }
 }

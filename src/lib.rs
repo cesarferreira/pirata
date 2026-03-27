@@ -6,4 +6,5 @@ pub mod downloader;
 pub mod indexer;
 pub mod model;
 pub mod output;
+pub mod tui;
 pub mod util;
