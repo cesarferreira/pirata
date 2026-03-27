@@ -1,3 +1,5 @@
+use std::process::Stdio;
+
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode, Url};
@@ -107,6 +109,23 @@ impl TransmissionDownloader {
             );
         }
     }
+
+    fn add_via_standalone_cli(&self, magnet: &str) -> Result<()> {
+        let mut command = std::process::Command::new("transmission-cli");
+        command.stdin(Stdio::null());
+        command.stdout(Stdio::null());
+        command.stderr(Stdio::null());
+
+        if let Some(download_dir) = &self.config.download_dir {
+            command.arg("-w").arg(download_dir);
+        }
+        command.arg(magnet);
+
+        command.spawn().context(
+            "failed to start standalone transmission-cli fallback; install transmission-cli or configure a Transmission daemon",
+        )?;
+        Ok(())
+    }
 }
 
 #[async_trait]
@@ -114,10 +133,14 @@ impl Downloader for TransmissionDownloader {
     async fn add_magnet(&self, magnet: &str) -> Result<()> {
         match self.add_via_rpc(magnet).await {
             Ok(()) => Ok(()),
-            Err(rpc_error) => self
-                .add_via_cli(magnet)
-                .await
-                .map_err(|cli_error| anyhow!("{rpc_error}; fallback also failed: {cli_error}")),
+            Err(rpc_error) => match self.add_via_cli(magnet).await {
+                Ok(()) => Ok(()),
+                Err(remote_error) => self.add_via_standalone_cli(magnet).map_err(|cli_error| {
+                    anyhow!(
+                        "{rpc_error}; transmission-remote fallback also failed: {remote_error}; standalone CLI fallback also failed: {cli_error}"
+                    )
+                }),
+            },
         }
     }
 }
