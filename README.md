@@ -1,89 +1,92 @@
 # pirate-ctl
 
-`pirate-ctl` is a fast, scriptable Rust CLI for searching torrents, inspecting metadata, extracting magnet links, and sending them directly to a local downloader.
+Usage-focused torrent search and download CLI.
 
-The current implementation ships with:
-
-- Pirate Bay search and info lookup
-- Magnet extraction with fallback magnet construction from the info hash
-- Transmission support through RPC, with `transmission-remote` as a fallback
-- System magnet opening via the OS default handler
-- Interactive fuzzy selection for search results
-- JSON output for automation and shell pipelines
-- Short-lived search result caching
-
-## Why this exists
-
-The goal is to make the common terminal workflow short:
-
-1. Search for something
-2. Inspect or pick a result
-3. Send it to a downloader without copy-pasting magnet links around
-
-`pirate-ctl` is intended to stay thin. It is not a torrent manager or a daemon. It is an orchestration layer between indexers and downloaders.
-
-## Features
-
-### Search
+## Build
 
 ```bash
-pirate-ctl search "ubuntu 24.04"
-pirate-ctl search "ubuntu 24.04" --sort seeders
-pirate-ctl search "ubuntu 24.04" --interactive
-pirate-ctl search "ubuntu 24.04" --json
+cargo build
+cargo run -- --help
 ```
 
-- Prints a table with `id`, `name`, `seeders`, `leechers`, `size`, and `status`
-- Supports fuzzy interactive selection and immediate add
-- Supports JSON output for scripts
+## Setup
 
-### Info and magnet
+Create a config file with `transmission` as the default downloader:
 
 ```bash
-pirate-ctl info 81462446
-pirate-ctl magnet 81462446
-pirate-ctl magnet 81462446 --json
+cargo run -- setup
 ```
 
-- `info` prints detailed torrent metadata plus the resolved magnet
-- `magnet` prints only the magnet link by default, which makes it shell-friendly
-
-### Add
+Set a download directory:
 
 ```bash
-pirate-ctl add 81462446
-pirate-ctl add 81462446 --open
-pirate-ctl add 81462446 --downloader system
+cargo run -- setup --download-dir ~/Downloads/torrents
 ```
 
-- Fetches torrent info
-- Resolves the magnet from the source when available
-- Falls back to `magnet:?xt=urn:btih:...&dn=...` when necessary
-- Sends the magnet to Transmission or to the system magnet handler
-
-### Lucky mode
+Check local dependencies and active config source:
 
 ```bash
-pirate-ctl lucky "ubuntu server 24.04"
-pirate-ctl lucky "ubuntu server 24.04" --dry-run
-pirate-ctl lucky "ubuntu server 24.04" --min-seeders 5 --trusted-only
-pirate-ctl lucky "ubuntu server 24.04" --min-size 1GB --max-size 5GB
+cargo run -- doctor
+cargo run -- --json doctor
 ```
 
-Lucky mode searches, scores, filters, selects the best candidate, and optionally adds it.
+## Search
 
-Scoring uses:
-
-```text
-score = sqrt(seeders) * 10
-      + 30 for vip
-      + 15 for trusted
-      - 0.5 * leechers
+```bash
+cargo run -- search "ubuntu 24.04"
+cargo run -- search "ubuntu 24.04" --sort seeders
+cargo run -- search "ubuntu 24.04" --interactive
+cargo run -- search "ubuntu 24.04" --json
 ```
 
-## Global flags
+## Info and Magnet
 
-These flags work across commands:
+```bash
+cargo run -- info 81462446
+cargo run -- magnet 81462446
+cargo run -- magnet 81462446 --json
+```
+
+## Add
+
+Add by torrent id:
+
+```bash
+cargo run -- add 81462446
+```
+
+Force OS magnet handler:
+
+```bash
+cargo run -- add 81462446 --downloader system
+cargo run -- add 81462446 --open
+```
+
+## Lucky
+
+```bash
+cargo run -- lucky "ubuntu server 24.04"
+cargo run -- lucky "ubuntu server 24.04" --dry-run
+cargo run -- lucky "ubuntu server 24.04" --min-seeders 5 --trusted-only
+cargo run -- lucky "ubuntu server 24.04" --min-size 1GB --max-size 5GB
+```
+
+## TUI
+
+Full-screen picker plus foreground `transmission-cli` progress UI:
+
+```bash
+cargo run -- tui ubuntu
+cargo run -- tui "ubuntu 24.04" --sort seeders
+```
+
+Keys:
+
+- `Up` / `Down` or `j` / `k`: move
+- `Enter`: download selected result
+- `q`: quit
+
+## Global Flags
 
 ```text
 --json
@@ -93,134 +96,26 @@ These flags work across commands:
 --open
 ```
 
-Notes:
+## Config Path
 
-- `qbittorrent` and `aria2` are accepted as CLI values for forward compatibility, but are not implemented yet
-- `--open` overrides the downloader selection and uses the OS default magnet handler
-
-## Installation
-
-### Build locally
-
-```bash
-cargo build --release
-./target/release/pirate-ctl --help
-```
-
-### Install into Cargo's bin directory
-
-```bash
-cargo install --path .
-```
-
-## Configuration
-
-By default, `pirate-ctl` reads:
+Default config path:
 
 ```text
 ~/.config/pirate-ctl/config.toml
 ```
 
-Example:
+Write it with:
 
-```toml
-[defaults]
-indexer = "piratebay"
-downloader = "transmission"
-search_limit = 20
-
-[transmission]
-rpc_url = "http://localhost:9091/transmission/rpc"
-username = ""
-password = ""
-download_dir = ""
-
-[cache]
-ttl_minutes = 5
+```bash
+cargo run -- setup
 ```
 
-You can override the config path with `--config`.
-
-## Transmission behavior
-
-Transmission support works in two stages:
-
-1. Try the RPC endpoint configured by `transmission.rpc_url`
-2. Fall back to `transmission-remote` if RPC fails
-
-This keeps the default path clean while still working on machines where the CLI is available but RPC is not configured exactly as expected.
-
-## Output modes
-
-Human-readable output is the default:
-
-- Search prints a table
-- Info prints labeled fields
-- Magnet prints only the magnet URI
-
-For automation, `--json` emits structured JSON for:
-
-- `search`
-- `info`
-- `magnet`
-- `add`
-- `lucky`
-
-## Caching
-
-Recent search results are cached for a short period to reduce repeated indexer calls.
-
-- Cache TTL defaults to 5 minutes
-- Cache location uses the OS cache directory via the `directories` crate
-
-## Architecture
-
-The code is structured around a small core model and traits:
-
-- `Indexer`
-- `Downloader`
-- `Torrent`
-
-Current implementations:
-
-- `PirateBayIndexer`
-- `TransmissionDownloader`
-- `SystemDownloader`
-
-Main modules:
-
-- `src/app.rs`: command orchestration
-- `src/indexer/`: search and info lookup
-- `src/downloader/`: downloader integrations
-- `src/config.rs`: TOML config loading
-- `src/cache.rs`: cached search results
-
-## Current implementation notes
-
-This first version uses direct HTTP integrations for Pirate Bay and Transmission instead of separate wrapper crates. That keeps the behavior explicit and easy to debug while the command surface settles.
-
-Live service behavior still depends on:
-
-- Pirate Bay / ApiBay availability
-- Transmission RPC availability or local `transmission-remote` presence
-
-## Development
-
-Useful commands:
+## Useful Commands
 
 ```bash
 cargo fmt
 RUSTC_WRAPPER= cargo check
 RUSTC_WRAPPER= cargo test
-RUSTC_WRAPPER= cargo run -- --help
+RUSTC_WRAPPER= cargo run -- doctor
+RUSTC_WRAPPER= cargo run -- tui ubuntu
 ```
-
-## Roadmap
-
-Likely next steps:
-
-- qBittorrent support
-- aria2 support
-- additional indexers behind the same trait boundary
-- richer result filtering and sorting
-- fallback scraper behavior when the JSON API changes

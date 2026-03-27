@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::{Result, anyhow, bail};
+use crossterm::style::Stylize;
 use dialoguer::{FuzzySelect, theme::ColorfulTheme};
 use serde::Serialize;
 
@@ -281,6 +282,7 @@ impl App {
 
     fn handle_doctor(&self, config_override: Option<PathBuf>, json: bool) -> Result<()> {
         let config_path = config_override.unwrap_or_else(default_config_path);
+        let config_exists = config_path.is_file();
         let default_downloader = self.config.defaults.downloader;
         let transmission_cli_installed = command_exists("transmission-cli");
         let transmission_remote_installed = command_exists("transmission-remote");
@@ -291,6 +293,12 @@ impl App {
 
         let report = DoctorReport {
             config_path: config_path.display().to_string(),
+            config_exists,
+            config_source: if config_exists {
+                "file".to_string()
+            } else {
+                "built-in defaults".to_string()
+            },
             default_downloader: default_downloader.to_string(),
             transmission_cli_installed,
             transmission_remote_installed,
@@ -303,37 +311,58 @@ impl App {
         if json {
             print_json(&report)?;
         } else {
-            println!("Config: {}", report.config_path);
-            println!("Default downloader: {}", report.default_downloader);
+            println!("{}", "pirate-ctl doctor".bold().cyan());
             println!(
-                "transmission-cli: {}",
+                "{} {}",
+                "Config:".bold().blue(),
+                report.config_path.as_str().white()
+            );
+            println!(
+                "{} {}",
+                "Config source:".bold().blue(),
+                if report.config_exists {
+                    "file exists".green()
+                } else {
+                    "file missing, using built-in defaults".yellow()
+                }
+            );
+            println!(
+                "{} {}",
+                "Default downloader:".bold().blue(),
+                report.default_downloader.as_str().magenta()
+            );
+            println!(
+                "{} {}",
+                "transmission-cli:".bold().blue(),
                 if report.transmission_cli_installed {
-                    "installed"
+                    "installed".green()
                 } else {
-                    "missing"
+                    "missing".red()
                 }
             );
             println!(
-                "transmission-remote: {}",
+                "{} {}",
+                "transmission-remote:".bold().blue(),
                 if report.transmission_remote_installed {
-                    "installed"
+                    "installed".green()
                 } else {
-                    "missing"
+                    "missing".red()
                 }
             );
             println!(
-                "transmission-daemon: {}",
+                "{} {}",
+                "transmission-daemon:".bold().blue(),
                 if report.transmission_daemon_installed {
-                    "installed"
+                    "installed".green()
                 } else {
-                    "missing"
+                    "missing".red()
                 }
             );
             if let Some(hint) = report.transmission_cli_hint {
-                println!("{hint}");
+                println!("{} {}", "Hint:".bold().yellow(), hint.as_str().yellow());
             }
             if let Some(warning) = report.gui_warning {
-                println!("{warning}");
+                println!("{} {}", "Warning:".bold().yellow(), warning.as_str().yellow());
             }
         }
 
@@ -480,6 +509,8 @@ struct LuckyOutput {
 #[derive(Debug, Serialize)]
 struct DoctorReport {
     config_path: String,
+    config_exists: bool,
+    config_source: String,
     default_downloader: String,
     transmission_cli_installed: bool,
     transmission_remote_installed: bool,
