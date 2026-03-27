@@ -3,6 +3,7 @@ use async_trait::async_trait;
 
 use crate::model::Torrent;
 
+pub mod aria2;
 pub mod system;
 pub mod transmission;
 

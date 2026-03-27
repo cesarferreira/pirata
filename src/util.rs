@@ -64,6 +64,14 @@ pub fn ensure_transmission_cli_available() -> Result<()> {
     bail!("{}", transmission_cli_missing_message())
 }
 
+pub fn ensure_aria2_available() -> Result<()> {
+    if command_exists("aria2c") {
+        return Ok(());
+    }
+
+    bail!("{}", aria2_missing_message())
+}
+
 pub fn command_exists(command: &str) -> bool {
     let candidate = PathBuf::from(command);
     if candidate.components().count() > 1 {
@@ -93,6 +101,26 @@ pub fn transmission_cli_missing_message() -> String {
     }
 
     "`transmission-cli` was not found in PATH. Install it and ensure it is on PATH.".to_string()
+}
+
+pub fn aria2_missing_message() -> String {
+    if cfg!(target_os = "linux") {
+        if fs::read_to_string("/etc/os-release")
+            .ok()
+            .as_deref()
+            .is_some_and(is_debian_like_os_release)
+        {
+            return "`aria2c` was not found in PATH. On Debian/Ubuntu install it with `sudo apt install aria2`.".to_string();
+        }
+
+        return "`aria2c` was not found in PATH. Install the `aria2` package for your distribution and ensure `aria2c` is on PATH.".to_string();
+    }
+
+    if cfg!(target_os = "macos") {
+        return "`aria2c` was not found in PATH. Install it with `brew install aria2`.".to_string();
+    }
+
+    "`aria2c` was not found in PATH. Install it and ensure it is on PATH.".to_string()
 }
 
 fn is_debian_like_os_release(contents: &str) -> bool {

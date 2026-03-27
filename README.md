@@ -22,8 +22,9 @@ cargo run -- setup
 The wizard lets you choose:
 
 - default downloader mode
-- Transmission client mode: `cli`, `rpc`, or `auto`
-- download directory
+- Aria2 download directory
+- Transmission client mode: `cli`, `rpc`, or `auto` when you pick Transmission
+- Transmission download directory when you pick Transmission
 - RPC URL and credentials when using RPC mode
 
 Start setup and prefill the download directory prompt:
@@ -48,7 +49,9 @@ cargo run -- search "ubuntu 24.04" --interactive
 cargo run -- search "ubuntu 24.04" --json
 ```
 
-With Transmission client mode set to `cli`, `search --interactive`, `add`, and `lucky` stream `transmission-cli` output in the terminal and wait for the download to finish.
+By default, `search --interactive`, `add`, and `lucky` run `aria2c` in the foreground and wait for the download to finish.
+
+If you switch to the `transmission` downloader, those commands use the configured Transmission client instead.
 
 ## Info and Magnet
 
@@ -94,6 +97,8 @@ cargo run -- tui "ubuntu 24.04" --sort seeders
 
 Downloads started inside the TUI have live progress in the dashboard.
 
+The TUI is currently Transmission-specific and requires `transmission-cli`, even if your default downloader is `aria2`.
+
 Keys:
 
 - `Tab`: cycle focus between query, results, and downloads
@@ -135,5 +140,6 @@ cargo fmt
 RUSTC_WRAPPER= cargo check
 RUSTC_WRAPPER= cargo test
 RUSTC_WRAPPER= cargo run -- doctor
+RUSTC_WRAPPER= cargo run -- lucky ubuntu
 RUSTC_WRAPPER= cargo run -- tui ubuntu
 ```

@@ -39,7 +39,8 @@ pub async fn run_setup_wizard(
     }
 
     let mode_items = [
-        "Transmission CLI (Recommended)",
+        "Aria2 CLI (Recommended)",
+        "Transmission CLI",
         "Transmission RPC / daemon",
         "Transmission auto fallback",
         "System magnet handler",
@@ -48,28 +49,32 @@ pub async fn run_setup_wizard(
         .with_prompt("Choose the default downloader")
         .items(mode_items)
         .default(match (config.defaults.downloader, config.transmission.client) {
-            (DownloaderKind::Transmission, TransmissionClient::Cli) => 0,
-            (DownloaderKind::Transmission, TransmissionClient::Rpc) => 1,
-            (DownloaderKind::Transmission, TransmissionClient::Auto) => 2,
-            (DownloaderKind::System, _) => 3,
+            (DownloaderKind::Aria2, _) => 0,
+            (DownloaderKind::Transmission, TransmissionClient::Cli) => 1,
+            (DownloaderKind::Transmission, TransmissionClient::Rpc) => 2,
+            (DownloaderKind::Transmission, TransmissionClient::Auto) => 3,
+            (DownloaderKind::System, _) => 4,
             _ => 0,
         })
         .interact()?;
 
     match selected_mode {
         0 => {
-            config.defaults.downloader = DownloaderKind::Transmission;
-            config.transmission.client = TransmissionClient::Cli;
+            config.defaults.downloader = DownloaderKind::Aria2;
         }
         1 => {
             config.defaults.downloader = DownloaderKind::Transmission;
-            config.transmission.client = TransmissionClient::Rpc;
+            config.transmission.client = TransmissionClient::Cli;
         }
         2 => {
             config.defaults.downloader = DownloaderKind::Transmission;
-            config.transmission.client = TransmissionClient::Auto;
+            config.transmission.client = TransmissionClient::Rpc;
         }
         3 => {
+            config.defaults.downloader = DownloaderKind::Transmission;
+            config.transmission.client = TransmissionClient::Auto;
+        }
+        4 => {
             config.defaults.downloader = DownloaderKind::System;
         }
         _ => unreachable!(),
@@ -80,16 +85,34 @@ pub async fn run_setup_wizard(
             .download_dir
             .as_ref()
             .map(|value| value.display().to_string())
-            .or_else(|| config.transmission.download_dir.clone())
+            .or_else(|| match config.defaults.downloader {
+                DownloaderKind::Aria2 => config.aria2.download_dir.clone(),
+                DownloaderKind::Transmission => config.transmission.download_dir.clone(),
+                _ => None,
+            })
             .unwrap_or_default();
         let download_dir: String = Input::with_theme(&theme)
-            .with_prompt("Download directory (leave blank to keep client default)")
+            .with_prompt(match config.defaults.downloader {
+                DownloaderKind::Aria2 => "Download directory",
+                _ => "Download directory (leave blank to keep client default)",
+            })
             .default(current_download_dir)
-            .allow_empty(true)
+            .allow_empty(!matches!(config.defaults.downloader, DownloaderKind::Aria2))
             .interact_text()?;
-        config.transmission.download_dir = (!download_dir.trim().is_empty()).then_some(download_dir);
+        match config.defaults.downloader {
+            DownloaderKind::Aria2 => {
+                config.aria2.download_dir = Some(download_dir);
+            }
+            DownloaderKind::Transmission => {
+                config.transmission.download_dir =
+                    (!download_dir.trim().is_empty()).then_some(download_dir);
+            }
+            _ => {}
+        }
 
-        if matches!(config.transmission.client, TransmissionClient::Rpc) {
+        if matches!(config.defaults.downloader, DownloaderKind::Transmission)
+            && matches!(config.transmission.client, TransmissionClient::Rpc)
+        {
             let rpc_url: String = Input::with_theme(&theme)
                 .with_prompt("Transmission RPC URL")
                 .default(config.transmission.rpc_url.clone())

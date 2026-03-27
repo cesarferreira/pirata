@@ -9,6 +9,7 @@ use crate::cache::SearchCache;
 use crate::cli::{Cli, Commands, LuckyArgs, SearchArgs, SetupArgs, TuiArgs};
 use crate::config::{AppConfig, TransmissionClient, default_config_path};
 use crate::downloader::Downloader;
+use crate::downloader::aria2::Aria2Downloader;
 use crate::downloader::system::SystemDownloader;
 use crate::downloader::transmission::TransmissionDownloader;
 use crate::indexer::Indexer;
@@ -17,7 +18,9 @@ use crate::model::{DownloaderKind, IndexerKind, SearchSort, Torrent};
 use crate::output::{print_json, print_search_table, print_torrent_info};
 use crate::setup::run_setup_wizard;
 use crate::tui::run_search_tui;
-use crate::util::{command_exists, parse_size_filter, transmission_cli_missing_message};
+use crate::util::{
+    aria2_missing_message, command_exists, parse_size_filter, transmission_cli_missing_message,
+};
 
 #[derive(Debug, Clone)]
 pub struct App {
@@ -303,6 +306,7 @@ impl App {
         let config_path = config_override.unwrap_or_else(default_config_path);
         let config_exists = config_path.is_file();
         let default_downloader = self.config.defaults.downloader;
+        let aria2_installed = command_exists("aria2c");
         let transmission_cli_installed = command_exists("transmission-cli");
         let transmission_remote_installed = command_exists("transmission-remote");
         let transmission_daemon_installed = command_exists("transmission-daemon");
@@ -319,11 +323,14 @@ impl App {
                 "built-in defaults".to_string()
             },
             default_downloader: default_downloader.to_string(),
-            transmission_client: self.config.transmission.client.to_string(),
-            transmission_download_target: self.config.transmission.download_target_display(),
+            download_target: default_download_target_for(&self.config, default_downloader),
+            transmission_client: matches!(default_downloader, DownloaderKind::Transmission)
+                .then(|| self.config.transmission.client.to_string()),
+            aria2_installed,
             transmission_cli_installed,
             transmission_remote_installed,
             transmission_daemon_installed,
+            aria2_hint: (!aria2_installed).then_some(aria2_missing_message()),
             transmission_cli_hint: (!transmission_cli_installed)
                 .then_some(transmission_cli_missing_message()),
             gui_warning,
@@ -354,13 +361,24 @@ impl App {
             );
             println!(
                 "{} {}",
-                "Transmission client:".bold().blue(),
-                report.transmission_client.as_str().magenta()
+                "Download target:".bold().blue(),
+                report.download_target.as_str().white()
             );
+            if let Some(transmission_client) = &report.transmission_client {
+                println!(
+                    "{} {}",
+                    "Transmission client:".bold().blue(),
+                    transmission_client.as_str().magenta()
+                );
+            }
             println!(
                 "{} {}",
-                "Download target:".bold().blue(),
-                report.transmission_download_target.as_str().white()
+                "aria2c:".bold().blue(),
+                if report.aria2_installed {
+                    "installed".green()
+                } else {
+                    "missing".red()
+                }
             );
             println!(
                 "{} {}",
@@ -389,6 +407,9 @@ impl App {
                     "missing".red()
                 }
             );
+            if let Some(hint) = report.aria2_hint {
+                println!("{} {}", "Hint:".bold().yellow(), hint.as_str().yellow());
+            }
             if let Some(hint) = report.transmission_cli_hint {
                 println!("{} {}", "Hint:".bold().yellow(), hint.as_str().yellow());
             }
@@ -415,9 +436,18 @@ impl App {
         let output = SetupOutput {
             config_path: setup.path.display().to_string(),
             default_downloader: setup.config.defaults.downloader.to_string(),
-            transmission_client: setup.config.transmission.client.to_string(),
-            download_dir: setup.config.transmission.download_dir.clone(),
+            download_target: default_download_target_for(
+                &setup.config,
+                setup.config.defaults.downloader,
+            ),
+            transmission_client: matches!(
+                setup.config.defaults.downloader,
+                DownloaderKind::Transmission
+            )
+            .then(|| setup.config.transmission.client.to_string()),
+            aria2_installed: command_exists("aria2c"),
             transmission_cli_installed: cli_installed,
+            aria2_hint: (!command_exists("aria2c")).then_some(aria2_missing_message()),
             transmission_cli_hint: (!cli_installed).then_some(transmission_cli_missing_message()),
         };
 
@@ -426,9 +456,12 @@ impl App {
         } else {
             println!("Wrote config to {}", output.config_path);
             println!("Default downloader set to {}", output.default_downloader);
-            println!("Transmission client: {}", output.transmission_client);
-            if let Some(download_dir) = output.download_dir {
-                println!("Transmission download dir: {download_dir}");
+            println!("Download target: {}", output.download_target);
+            if let Some(transmission_client) = output.transmission_client {
+                println!("Transmission client: {}", transmission_client);
+            }
+            if let Some(hint) = output.aria2_hint {
+                println!("{hint}");
             }
             if let Some(hint) = output.transmission_cli_hint {
                 println!("{hint}");
@@ -481,8 +514,9 @@ impl App {
             DownloaderKind::Transmission => Ok(Box::new(TransmissionDownloader::new(
                 self.config.transmission.clone(),
             )?)),
+            DownloaderKind::Aria2 => Ok(Box::new(Aria2Downloader::new(self.config.aria2.clone()))),
             DownloaderKind::System => Ok(Box::new(SystemDownloader)),
-            DownloaderKind::Qbittorrent | DownloaderKind::Aria2 => {
+            DownloaderKind::Qbittorrent => {
                 Err(anyhow!("{kind} downloader is not implemented yet"))
             }
         }
@@ -519,7 +553,10 @@ impl App {
                     format!("Finished processing '{}' via transmission", torrent_name)
                 }
             },
-            DownloaderKind::Qbittorrent | DownloaderKind::Aria2 => {
+            DownloaderKind::Aria2 => {
+                format!("Finished download for '{}' via aria2c", torrent_name)
+            }
+            DownloaderKind::Qbittorrent => {
                 format!("Added '{}' via {}", torrent_name, self.action_target(downloader_kind, false))
             }
             DownloaderKind::System => format!("Opened '{}' via system handler", torrent_name),
@@ -532,9 +569,19 @@ impl App {
         }
 
         match downloader_kind {
-            DownloaderKind::Transmission => None,
+            DownloaderKind::Transmission | DownloaderKind::Aria2 => None,
             _ => None,
         }
+    }
+
+}
+
+fn default_download_target_for(config: &AppConfig, downloader_kind: DownloaderKind) -> String {
+    match downloader_kind {
+        DownloaderKind::Aria2 => config.aria2.download_target_display(),
+        DownloaderKind::Transmission => config.transmission.download_target_display(),
+        DownloaderKind::System => "OS / system handler decides".to_string(),
+        DownloaderKind::Qbittorrent => "qBittorrent decides".to_string(),
     }
 }
 
@@ -579,11 +626,13 @@ struct DoctorReport {
     config_exists: bool,
     config_source: String,
     default_downloader: String,
-    transmission_client: String,
-    transmission_download_target: String,
+    download_target: String,
+    transmission_client: Option<String>,
+    aria2_installed: bool,
     transmission_cli_installed: bool,
     transmission_remote_installed: bool,
     transmission_daemon_installed: bool,
+    aria2_hint: Option<String>,
     transmission_cli_hint: Option<String>,
     gui_warning: Option<String>,
 }
@@ -592,8 +641,10 @@ struct DoctorReport {
 struct SetupOutput {
     config_path: String,
     default_downloader: String,
-    transmission_client: String,
-    download_dir: Option<String>,
+    download_target: String,
+    transmission_client: Option<String>,
+    aria2_installed: bool,
+    aria2_hint: Option<String>,
     transmission_cli_installed: bool,
     transmission_cli_hint: Option<String>,
 }
