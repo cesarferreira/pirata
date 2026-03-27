@@ -6,7 +6,7 @@ use reqwest::{Client, StatusCode, Url};
 use serde::Serialize;
 use tokio::process::Command;
 
-use crate::config::TransmissionConfig;
+use crate::config::{TransmissionClient, TransmissionConfig};
 use crate::downloader::Downloader;
 use crate::util::ensure_transmission_cli_available;
 
@@ -134,15 +134,26 @@ impl TransmissionDownloader {
 #[async_trait]
 impl Downloader for TransmissionDownloader {
     async fn add_magnet(&self, magnet: &str) -> Result<()> {
-        match self.add_via_standalone_cli(magnet) {
-            Ok(()) => Ok(()),
-            Err(cli_error) => match self.add_via_rpc(magnet).await {
+        match self.config.client {
+            TransmissionClient::Cli => self.add_via_standalone_cli(magnet),
+            TransmissionClient::Rpc => match self.add_via_rpc(magnet).await {
                 Ok(()) => Ok(()),
                 Err(rpc_error) => self.add_via_cli(magnet).await.map_err(|remote_error| {
                     anyhow!(
-                        "standalone transmission-cli failed: {cli_error}; Transmission RPC also failed: {rpc_error}; transmission-remote fallback also failed: {remote_error}"
+                        "Transmission RPC failed: {rpc_error}; transmission-remote fallback also failed: {remote_error}"
                     )
                 }),
+            },
+            TransmissionClient::Auto => match self.add_via_standalone_cli(magnet) {
+                Ok(()) => Ok(()),
+                Err(cli_error) => match self.add_via_rpc(magnet).await {
+                    Ok(()) => Ok(()),
+                    Err(rpc_error) => self.add_via_cli(magnet).await.map_err(|remote_error| {
+                        anyhow!(
+                            "standalone transmission-cli failed: {cli_error}; Transmission RPC also failed: {rpc_error}; transmission-remote fallback also failed: {remote_error}"
+                        )
+                    }),
+                },
             },
         }
     }

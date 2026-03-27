@@ -16,6 +16,7 @@ Use this skill when the task is about changing, debugging, or extending this rep
 - add-by-id and lucky selection flows
 - a `tui` command that runs a full-screen picker and foreground `transmission-cli`
 - `doctor` and `setup` commands for local environment/config checks
+- first-run interactive setup when the config file is missing
 
 ## Important Behavior
 
@@ -27,6 +28,7 @@ Use this skill when the task is about changing, debugging, or extending this rep
   3. fall back to standalone `transmission-cli`
 - The `tui` command uses `transmission-cli` directly and does not use the system magnet handler.
 - Missing `transmission-cli` should produce an install hint instead of a generic spawn failure.
+- Missing config should trigger the setup wizard for normal interactive commands.
 
 ## Files To Check First
 
