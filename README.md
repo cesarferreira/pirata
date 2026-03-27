@@ -11,13 +11,22 @@ cargo run -- --help
 
 ## Setup
 
-Create a config file with `transmission` as the default downloader:
+If no config exists, `pirate-ctl` starts a first-run setup wizard before running your command.
+
+Run setup explicitly:
 
 ```bash
 cargo run -- setup
 ```
 
-Set a download directory:
+The wizard lets you choose:
+
+- default downloader mode
+- Transmission client mode: `cli`, `rpc`, or `auto`
+- download directory
+- RPC URL and credentials when using RPC mode
+
+Start setup and prefill the download directory prompt:
 
 ```bash
 cargo run -- setup --download-dir ~/Downloads/torrents
@@ -76,15 +85,20 @@ cargo run -- lucky "ubuntu server 24.04" --min-size 1GB --max-size 5GB
 Full-screen picker plus foreground `transmission-cli` progress UI:
 
 ```bash
+cargo run -- tui
 cargo run -- tui ubuntu
 cargo run -- tui "ubuntu 24.04" --sort seeders
 ```
 
 Keys:
 
+- `Tab`: cycle focus between query, results, and downloads
 - `Up` / `Down` or `j` / `k`: move
-- `Enter`: download selected result
-- `q`: quit
+- `Enter`: search or start selected download
+- `/`: start a fresh search
+- `d`: abort selected download
+- `q` or `Esc`: stop active foreground downloads and quit
+- `Q`: stop active foreground downloads and quit
 
 ## Global Flags
 

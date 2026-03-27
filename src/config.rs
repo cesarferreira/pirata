@@ -1,3 +1,4 @@
+use std::fmt;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -40,6 +41,8 @@ impl Default for DefaultsConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TransmissionConfig {
+    #[serde(default = "default_transmission_client")]
+    pub client: TransmissionClient,
     #[serde(default = "default_transmission_rpc_url")]
     pub rpc_url: String,
     pub username: Option<String>,
@@ -50,6 +53,7 @@ pub struct TransmissionConfig {
 impl Default for TransmissionConfig {
     fn default() -> Self {
         Self {
+            client: default_transmission_client(),
             rpc_url: default_transmission_rpc_url(),
             username: None,
             password: None,
@@ -132,8 +136,30 @@ fn default_transmission_rpc_url() -> String {
     "http://localhost:9091/transmission/rpc".to_string()
 }
 
+fn default_transmission_client() -> TransmissionClient {
+    TransmissionClient::Cli
+}
+
 fn default_cache_ttl_minutes() -> u64 {
     5
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TransmissionClient {
+    Cli,
+    Rpc,
+    Auto,
+}
+
+impl fmt::Display for TransmissionClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Cli => write!(f, "cli"),
+            Self::Rpc => write!(f, "rpc"),
+            Self::Auto => write!(f, "auto"),
+        }
+    }
 }
 
 #[cfg(test)]

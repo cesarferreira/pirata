@@ -5,7 +5,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -15,8 +15,8 @@ use ratatui::Terminal;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
-use ratatui::text::Line;
-use ratatui::widgets::{Block, Borders, Gauge, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::text::{Line, Span};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
 
 use crate::config::TransmissionConfig;
 use crate::model::Torrent;
@@ -25,18 +25,18 @@ use crate::util::{ensure_transmission_cli_available, format_size};
 const MAX_LOG_LINES: usize = 14;
 const TICK_RATE: Duration = Duration::from_millis(100);
 
-pub fn run_search_tui(
-    query: String,
-    results: Vec<Torrent>,
+pub fn run_search_tui<F>(
+    initial_query: Option<String>,
     transmission: TransmissionConfig,
-) -> Result<()> {
-    if results.is_empty() {
-        bail!("no results found for '{query}'");
-    }
+    search: F,
+) -> Result<()>
+where
+    F: FnMut(&str) -> Result<Vec<Torrent>>,
+{
     ensure_transmission_cli_available()?;
 
     let mut terminal = setup_terminal()?;
-    let mut app = SearchTui::new(query, results, transmission);
+    let mut app = SearchTui::new(initial_query, transmission, search)?;
     let run_result = app.run(&mut terminal);
     let restore_result = restore_terminal(&mut terminal);
 
@@ -67,33 +67,60 @@ fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Re
     Ok(())
 }
 
-struct SearchTui {
-    query: String,
+struct SearchTui<F>
+where
+    F: FnMut(&str) -> Result<Vec<Torrent>>,
+{
+    query_input: String,
+    query: Option<String>,
     results: Vec<Torrent>,
-    selected: usize,
+    selected_result: usize,
+    selected_download: usize,
+    downloads: Vec<DownloadSession>,
     transmission: TransmissionConfig,
-    download: Option<DownloadSession>,
     should_quit: bool,
     tick: usize,
+    focus: FocusPane,
+    status_message: String,
+    search: F,
 }
 
-impl SearchTui {
-    fn new(query: String, results: Vec<Torrent>, transmission: TransmissionConfig) -> Self {
-        Self {
-            query,
-            results,
-            selected: 0,
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FocusPane {
+    Query,
+    Results,
+    Downloads,
+}
+
+impl<F> SearchTui<F>
+where
+    F: FnMut(&str) -> Result<Vec<Torrent>>,
+{
+    fn new(initial_query: Option<String>, transmission: TransmissionConfig, search: F) -> Result<Self> {
+        let mut app = Self {
+            query_input: initial_query.unwrap_or_default(),
+            query: None,
+            results: Vec::new(),
+            selected_result: 0,
+            selected_download: 0,
+            downloads: Vec::new(),
             transmission,
-            download: None,
             should_quit: false,
             tick: 0,
+            focus: FocusPane::Query,
+            status_message: "Type a query and press Enter to search.".to_string(),
+            search,
+        };
+        if !app.query_input.trim().is_empty() {
+            app.submit_query()?;
         }
+        Ok(app)
     }
 
     fn run(&mut self, terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
         while !self.should_quit {
             self.tick = self.tick.wrapping_add(1);
-            if let Some(download) = self.download.as_mut() {
+            for download in &mut self.downloads {
                 download.drain_events();
                 download.poll_child()?;
             }
@@ -116,162 +143,226 @@ impl SearchTui {
     }
 
     fn draw(&mut self, frame: &mut ratatui::Frame<'_>) {
-        if let Some(download) = self.download.as_ref() {
-            self.draw_download(frame, download);
-        } else {
-            self.draw_selection(frame);
-        }
-    }
-
-    fn draw_selection(&self, frame: &mut ratatui::Frame<'_>) {
         let layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(3),
-                Constraint::Min(10),
+                Constraint::Min(14),
+                Constraint::Length(11),
                 Constraint::Length(3),
             ])
             .split(frame.area());
 
-        let header = Paragraph::new(format!(
-            "pirate-ctl tui | query: {} | {} result(s)",
-            self.query,
-            self.results.len()
-        ))
-        .block(Block::default().borders(Borders::ALL).title("Search"))
-        .style(Style::default().fg(Color::Cyan));
+        let header = Paragraph::new(Line::from(vec![
+            Span::styled(" pirate-ctl ", Style::default().fg(Color::Black).bg(Color::Cyan).add_modifier(Modifier::BOLD)),
+            Span::raw("  "),
+            focus_badge("query", matches!(self.focus, FocusPane::Query)),
+            Span::raw(" "),
+            focus_badge("results", matches!(self.focus, FocusPane::Results)),
+            Span::raw(" "),
+            focus_badge("downloads", matches!(self.focus, FocusPane::Downloads)),
+            Span::raw(format!(
+                "   results {}   active {}",
+                self.results.len(),
+                self.active_downloads()
+            )),
+        ]))
+        .block(Block::default().borders(Borders::ALL).title("Dashboard"))
+        .style(Style::default().fg(Color::White));
         frame.render_widget(header, layout[0]);
 
-        let body = Layout::default()
+        let top = Layout::default()
             .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(62), Constraint::Percentage(38)])
+            .constraints([
+                Constraint::Percentage(56),
+                Constraint::Percentage(44),
+            ])
             .split(layout[1]);
+        let left = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(8)])
+            .split(top[0]);
 
-        let items: Vec<ListItem<'_>> = self
+        let query_block = Block::default()
+            .borders(Borders::ALL)
+            .title("Search Query")
+            .border_style(self.focus_style(FocusPane::Query));
+        let query = Paragraph::new(self.query_input.as_str())
+            .block(query_block)
+            .style(Style::default().fg(Color::White));
+        frame.render_widget(query, left[0]);
+        if matches!(self.focus, FocusPane::Query) {
+            let cursor_x = left[0].x.saturating_add(1 + self.query_input.chars().count() as u16);
+            let cursor_y = left[0].y.saturating_add(1);
+            frame.set_cursor_position((cursor_x, cursor_y));
+        }
+
+        let result_items: Vec<ListItem<'_>> = self
             .results
             .iter()
             .map(|torrent| {
-                ListItem::new(format!(
-                    "{:>4} seeders  {:>8}  {}",
-                    torrent.seeders,
-                    format_size(torrent.size_bytes),
-                    torrent.name
-                ))
+                let line = Line::from(vec![
+                    Span::styled(
+                        format!("{:>4} ", torrent.seeders),
+                        Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::styled("seed ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:>8} ", format_size(torrent.size_bytes)),
+                        Style::default().fg(Color::Cyan),
+                    ),
+                    status_span(torrent.status.as_deref()),
+                    Span::raw(" "),
+                    Span::raw(torrent.name.clone()),
+                ]);
+                ListItem::new(line)
             })
             .collect();
-        let list = List::new(items)
+        let results = List::new(result_items)
             .block(Block::default().borders(Borders::ALL).title("Results"))
             .highlight_style(
                 Style::default()
-                    .fg(Color::Yellow)
+                    .fg(Color::Black)
+                    .bg(Color::Yellow)
                     .add_modifier(Modifier::BOLD),
             )
-            .highlight_symbol(">> ");
-        let mut state = ListState::default();
-        state.select(Some(self.selected));
-        frame.render_stateful_widget(list, body[0], &mut state);
+            .highlight_symbol("▌ ");
+        let mut results_state = ListState::default();
+        results_state.select((!self.results.is_empty()).then_some(self.selected_result));
+        frame.render_stateful_widget(results, left[1], &mut results_state);
 
-        let selected = &self.results[self.selected];
-        let detail_lines = vec![
-            Line::from(format!("Name: {}", selected.name)),
-            Line::from(format!("ID: {}", selected.id)),
-            Line::from(format!("Seeders: {}", selected.seeders)),
-            Line::from(format!("Leechers: {}", selected.leechers)),
-            Line::from(format!("Size: {}", format_size(selected.size_bytes))),
-            Line::from(format!(
-                "Status: {}",
-                selected.status.as_deref().unwrap_or("-")
-            )),
-            Line::from(format!(
-                "Uploader: {}",
-                selected.uploaded_by.as_deref().unwrap_or("-")
-            )),
-        ];
-        let details = Paragraph::new(detail_lines)
-            .block(Block::default().borders(Borders::ALL).title("Details"))
+        let details = self.result_details_lines();
+        let detail_widget = Paragraph::new(details)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Selection")
+                    .border_style(self.focus_style(FocusPane::Results)),
+            )
             .wrap(Wrap { trim: true });
-        frame.render_widget(details, body[1]);
+        frame.render_widget(detail_widget, top[1]);
 
-        let footer =
-            Paragraph::new("Up/Down or j/k to move. Enter downloads with transmission-cli. q quits.")
-                .block(Block::default().borders(Borders::ALL).title("Keys"));
-        frame.render_widget(footer, layout[2]);
-    }
+        let bottom = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(38), Constraint::Percentage(62)])
+            .split(layout[2]);
 
-    fn draw_download(&self, frame: &mut ratatui::Frame<'_>, download: &DownloadSession) {
-        let layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Length(5),
-                Constraint::Length(3),
-                Constraint::Min(8),
-                Constraint::Length(3),
-            ])
-            .split(frame.area());
-
-        let summary = Paragraph::new(vec![
-            Line::from(format!("Torrent: {}", download.torrent.name)),
-            Line::from(format!(
-                "Size: {} | Seeders: {} | Elapsed: {}s",
-                format_size(download.torrent.size_bytes),
-                download.torrent.seeders,
-                download.started_at.elapsed().as_secs()
-            )),
-            Line::from(format!("Info hash: {}", download.torrent.info_hash)),
-        ])
-        .block(Block::default().borders(Borders::ALL).title("Downloading"))
-        .wrap(Wrap { trim: false });
-        frame.render_widget(summary, layout[0]);
-
-        let gauge = Gauge::default()
-            .block(Block::default().borders(Borders::ALL).title("Progress"))
-            .gauge_style(
+        let download_items: Vec<ListItem<'_>> = if self.downloads.is_empty() {
+            vec![ListItem::new(Line::from(vec![Span::styled(
+                "No downloads yet. Press Enter on a result to start one.",
+                Style::default().fg(Color::DarkGray),
+            )]))]
+        } else {
+            self.downloads
+                .iter()
+                .map(|download| {
+                    let line = Line::from(vec![
+                        download.status_badge(self.tick),
+                        Span::raw(" "),
+                        Span::styled(download.progress_summary(self.tick), Style::default().fg(Color::LightBlue)),
+                        Span::raw(" "),
+                        Span::raw(download.torrent.name.clone()),
+                    ]);
+                    ListItem::new(line)
+                })
+                .collect()
+        };
+        let downloads = List::new(download_items)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title("Downloads")
+                    .border_style(self.focus_style(FocusPane::Downloads)),
+            )
+            .highlight_style(
                 Style::default()
-                    .fg(if download.is_finished() {
-                        Color::Green
-                    } else {
-                        Color::LightBlue
-                    })
-                    .bg(Color::Black)
+                    .fg(Color::Black)
+                    .bg(Color::Cyan)
                     .add_modifier(Modifier::BOLD),
             )
-            .ratio(download.progress_ratio(self.tick))
-            .label(download.progress_label(self.tick));
-        frame.render_widget(gauge, layout[1]);
+            .highlight_symbol("▌ ");
+        let mut downloads_state = ListState::default();
+        downloads_state.select((!self.downloads.is_empty()).then_some(self.selected_download));
+        frame.render_stateful_widget(downloads, bottom[0], &mut downloads_state);
 
-        let logs = download.logs_for_render();
-        let log_widget = Paragraph::new(logs)
-            .block(Block::default().borders(Borders::ALL).title("Downloader Output"))
-            .wrap(Wrap { trim: false });
-        frame.render_widget(log_widget, layout[2]);
+        let download_detail_widget = Paragraph::new(self.download_details_lines(self.tick))
+            .block(Block::default().borders(Borders::ALL).title("Activity"))
+            .wrap(Wrap { trim: true });
+        frame.render_widget(download_detail_widget, bottom[1]);
 
-        let footer = Paragraph::new(download.footer_text())
-            .block(Block::default().borders(Borders::ALL).title("Keys"));
+        let footer = Paragraph::new(vec![
+            Line::from(vec![
+                Span::styled("Tab", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw(" focus  "),
+                Span::styled("Enter", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw(" search/start  "),
+                Span::styled("/", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw(" edit query  "),
+                Span::styled("d", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw(" abort download  "),
+                Span::styled("q", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw(" stop active + quit  "),
+                Span::styled("Q", Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)),
+                Span::raw(" stop active + quit"),
+            ]),
+            Line::from(Span::styled(
+                self.status_message.clone(),
+                Style::default().fg(Color::White),
+            )),
+        ])
+        .block(Block::default().borders(Borders::ALL).title("Keys"));
         frame.render_widget(footer, layout[3]);
     }
 
     fn handle_key(&mut self, key: KeyCode) -> Result<()> {
-        if self.download.is_some() {
-            return self.handle_download_key(key);
+        match key {
+            KeyCode::Tab => {
+                self.cycle_focus();
+                return Ok(());
+            }
+            KeyCode::BackTab => {
+                self.cycle_focus_reverse();
+                return Ok(());
+            }
+            KeyCode::Char('/') => {
+                if matches!(self.focus, FocusPane::Query) {
+                    return self.handle_query_key(key);
+                }
+                self.focus = FocusPane::Query;
+                self.query_input.clear();
+                self.status_message = "Type a new query and press Enter to search again.".to_string();
+                return Ok(());
+            }
+            KeyCode::Char('Q') => {
+                self.abort_all_downloads()?;
+                self.should_quit = true;
+                return Ok(());
+            }
+            KeyCode::Char('q') | KeyCode::Esc => {
+                if self.active_downloads() > 0 {
+                    self.abort_all_downloads()?;
+                }
+                self.should_quit = true;
+                return Ok(());
+            }
+            _ => {}
         }
 
+        match self.focus {
+            FocusPane::Query => self.handle_query_key(key),
+            FocusPane::Results => self.handle_results_key(key),
+            FocusPane::Downloads => self.handle_downloads_key(key),
+        }
+    }
+
+    fn handle_query_key(&mut self, key: KeyCode) -> Result<()> {
         match key {
-            KeyCode::Up | KeyCode::Char('k') => {
-                if self.selected > 0 {
-                    self.selected -= 1;
-                }
+            KeyCode::Enter => self.submit_query()?,
+            KeyCode::Backspace => {
+                self.query_input.pop();
             }
-            KeyCode::Down | KeyCode::Char('j') => {
-                if self.selected + 1 < self.results.len() {
-                    self.selected += 1;
-                }
-            }
-            KeyCode::Enter => {
-                let torrent = self.results[self.selected].clone();
-                self.download = Some(DownloadSession::start(torrent, &self.transmission)?);
-            }
-            KeyCode::Esc | KeyCode::Char('q') => {
-                self.should_quit = true;
+            KeyCode::Char(character) => {
+                self.query_input.push(character);
             }
             _ => {}
         }
@@ -279,29 +370,229 @@ impl SearchTui {
         Ok(())
     }
 
-    fn handle_download_key(&mut self, key: KeyCode) -> Result<()> {
-        let Some(download) = self.download.as_mut() else {
-            return Ok(());
-        };
-
+    fn handle_results_key(&mut self, key: KeyCode) -> Result<()> {
         match key {
-            KeyCode::Esc | KeyCode::Char('q') => {
-                if download.is_finished() {
-                    self.should_quit = true;
-                } else {
-                    download.abort()?;
-                    self.should_quit = true;
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.selected_result > 0 {
+                    self.selected_result -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.selected_result + 1 < self.results.len() {
+                    self.selected_result += 1;
                 }
             }
             KeyCode::Enter => {
-                if download.is_finished() {
-                    self.should_quit = true;
+                if let Some(torrent) = self.results.get(self.selected_result).cloned() {
+                    self.downloads
+                        .push(DownloadSession::start(torrent.clone(), &self.transmission)?);
+                    self.selected_download = self.downloads.len().saturating_sub(1);
+                    self.focus = FocusPane::Downloads;
+                    self.status_message = format!(
+                        "Started '{}' with transmission-cli. Search again while it runs.",
+                        torrent.name
+                    );
                 }
             }
             _ => {}
         }
 
         Ok(())
+    }
+
+    fn handle_downloads_key(&mut self, key: KeyCode) -> Result<()> {
+        match key {
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.selected_download > 0 {
+                    self.selected_download -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.selected_download + 1 < self.downloads.len() {
+                    self.selected_download += 1;
+                }
+            }
+            KeyCode::Char('d') => {
+                if let Some(download) = self.downloads.get_mut(self.selected_download) {
+                    if !download.is_finished() {
+                        let name = download.torrent.name.clone();
+                        download.abort()?;
+                        self.status_message = format!("Aborted '{name}'.");
+                    }
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn submit_query(&mut self) -> Result<()> {
+        let query = self.query_input.trim();
+        if query.is_empty() {
+            self.status_message = "Enter a query before searching.".to_string();
+            return Ok(());
+        }
+
+        self.status_message = format!("Searching for '{query}'...");
+        let results = (self.search)(query)?;
+        self.query = Some(query.to_string());
+        self.results = results;
+        self.selected_result = 0;
+        self.focus = FocusPane::Results;
+        self.status_message = if self.results.is_empty() {
+            format!("No results found for '{query}'.")
+        } else {
+            format!(
+                "Loaded {} result(s) for '{query}'. Press Enter to start a download.",
+                self.results.len()
+            )
+        };
+        Ok(())
+    }
+
+    fn cycle_focus(&mut self) {
+        self.focus = match self.focus {
+            FocusPane::Query => FocusPane::Results,
+            FocusPane::Results => FocusPane::Downloads,
+            FocusPane::Downloads => FocusPane::Query,
+        };
+    }
+
+    fn cycle_focus_reverse(&mut self) {
+        self.focus = match self.focus {
+            FocusPane::Query => FocusPane::Downloads,
+            FocusPane::Results => FocusPane::Query,
+            FocusPane::Downloads => FocusPane::Results,
+        };
+    }
+
+    fn active_downloads(&self) -> usize {
+        self.downloads.iter().filter(|download| !download.is_finished()).count()
+    }
+
+    fn abort_all_downloads(&mut self) -> Result<()> {
+        for download in &mut self.downloads {
+            if !download.is_finished() {
+                download.abort()?;
+            }
+        }
+        Ok(())
+    }
+
+    fn focus_style(&self, pane: FocusPane) -> Style {
+        if self.focus == pane {
+            Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        }
+    }
+
+    fn result_details_lines(&self) -> Vec<Line<'static>> {
+        if let Some(selected) = self.results.get(self.selected_result) {
+            vec![
+                Line::from(vec![
+                    Span::styled("Name ", Style::default().fg(Color::DarkGray)),
+                    Span::raw(selected.name.clone()),
+                ]),
+                Line::from(vec![
+                    Span::styled("ID ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(selected.id.clone(), Style::default().fg(Color::Yellow)),
+                ]),
+                Line::from(vec![
+                    Span::styled("Seeders ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        selected.seeders.to_string(),
+                        Style::default().fg(Color::Green).add_modifier(Modifier::BOLD),
+                    ),
+                    Span::raw("   "),
+                    Span::styled("Leechers ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(selected.leechers.to_string(), Style::default().fg(Color::Red)),
+                ]),
+                Line::from(vec![
+                    Span::styled("Size ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(format_size(selected.size_bytes), Style::default().fg(Color::Cyan)),
+                ]),
+                Line::from(vec![
+                    Span::styled("Status ", Style::default().fg(Color::DarkGray)),
+                    status_span(selected.status.as_deref()),
+                ]),
+                Line::from(vec![
+                    Span::styled("Uploader ", Style::default().fg(Color::DarkGray)),
+                    Span::raw(selected.uploaded_by.clone().unwrap_or_else(|| "-".to_string())),
+                ]),
+                Line::from(""),
+                Line::from("Enter starts a background download tracked below."),
+                Line::from("Press / for a fresh search without leaving the TUI."),
+            ]
+        } else if let Some(query) = &self.query {
+            vec![
+                Line::from(format!("No results loaded for '{query}'.")),
+                Line::from("Edit the query and press Enter to try again."),
+            ]
+        } else {
+            vec![
+                Line::from("Start by typing a search query."),
+                Line::from("The results list and downloads panel stay visible together."),
+            ]
+        }
+    }
+
+    fn download_details_lines(&self, tick: usize) -> Vec<Line<'static>> {
+        let Some(download) = self.downloads.get(self.selected_download) else {
+            return vec![
+                Line::from("No downloads yet."),
+                Line::from("Select a result and press Enter to start one."),
+            ];
+        };
+
+        let mut lines = vec![
+            Line::from(vec![
+                Span::styled("Torrent ", Style::default().fg(Color::DarkGray)),
+                Span::raw(download.torrent.name.clone()),
+            ]),
+            Line::from(vec![
+                Span::styled("Progress ", Style::default().fg(Color::DarkGray)),
+                Span::styled(download.progress_summary(tick), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
+                Span::raw("  "),
+                Span::raw(download.progress_label(tick)),
+            ]),
+            Line::from(vec![
+                Span::styled("Size ", Style::default().fg(Color::DarkGray)),
+                Span::raw(format_size(download.torrent.size_bytes)),
+                Span::raw("  "),
+                Span::styled("Seeders ", Style::default().fg(Color::DarkGray)),
+                Span::raw(download.torrent.seeders.to_string()),
+                Span::raw("  "),
+                Span::styled("Elapsed ", Style::default().fg(Color::DarkGray)),
+                Span::raw(format!("{}s", download.started_at.elapsed().as_secs())),
+            ]),
+            Line::from(vec![
+                Span::styled("Gauge ", Style::default().fg(Color::DarkGray)),
+                Span::styled(
+                    progress_bar(download.progress_ratio(tick), 24),
+                    Style::default().fg(if download.is_finished() {
+                        Color::Green
+                    } else {
+                        Color::Cyan
+                    }),
+                ),
+            ]),
+            Line::from(""),
+            Line::from(Span::styled(
+                "Latest output",
+                Style::default().add_modifier(Modifier::BOLD).fg(Color::Yellow),
+            )),
+        ];
+
+        let logs = download.logs_for_render();
+        if logs.is_empty() {
+            lines.push(Line::from("No output yet."));
+        } else {
+            lines.extend(logs.into_iter().rev().take(5).rev());
+        }
+
+        lines
     }
 }
 
@@ -404,11 +695,11 @@ impl DownloadSession {
         } else if self.is_finished() {
             1.0
         } else {
-            let phase = (tick % 30) as f64 / 30.0;
-            if phase <= 0.5 {
-                phase * 2.0
+            let phase = (tick % 20) as f64 / 20.0;
+            0.12 + if phase <= 0.5 {
+                phase * 0.36
             } else {
-                (1.0 - phase) * 2.0
+                (1.0 - phase) * 0.36
             }
         }
     }
@@ -421,26 +712,50 @@ impl DownloadSession {
         } else {
             let spinner = ["|", "/", "-", "\\"];
             format!(
-                "{} {}",
+                "{} estimating | {}",
                 spinner[tick % spinner.len()],
                 self.status_text
             )
         }
     }
 
-    fn logs_for_render(&self) -> Vec<Line<'_>> {
-        self.logs
-            .iter()
-            .map(|line| Line::from(line.as_str()))
-            .collect()
+    fn progress_summary(&self, tick: usize) -> String {
+        if let Some(progress) = self.progress {
+            format!("{:>5.1}%", progress * 100.0)
+        } else if self.is_finished() {
+            "100.0%".to_string()
+        } else {
+            let spinner = ["···", "•··", "••·", "•••"];
+            format!(" {} ", spinner[tick % spinner.len()])
+        }
     }
 
-    fn footer_text(&self) -> &'static str {
-        if self.is_finished() {
-            "Enter or q to exit."
-        } else {
-            "q aborts the foreground download."
+    fn status_badge(&self, tick: usize) -> Span<'static> {
+        match self.outcome {
+            Some(DownloadOutcome::Success) => {
+                Span::styled(" done ", Style::default().fg(Color::Black).bg(Color::Green))
+            }
+            Some(DownloadOutcome::Failed) => {
+                Span::styled(" fail ", Style::default().fg(Color::White).bg(Color::Red))
+            }
+            Some(DownloadOutcome::Aborted) => {
+                Span::styled(" stop ", Style::default().fg(Color::Black).bg(Color::Yellow))
+            }
+            None => {
+                let spinner = ["cli", "run", "net", "io "];
+                Span::styled(
+                    format!(" {} ", spinner[tick % spinner.len()]),
+                    Style::default().fg(Color::Black).bg(Color::Cyan),
+                )
+            }
         }
+    }
+
+    fn logs_for_render(&self) -> Vec<Line<'static>> {
+        self.logs
+            .iter()
+            .map(|line| Line::from(line.clone()))
+            .collect()
     }
 
     fn push_log(&mut self, line: String) {
@@ -577,6 +892,45 @@ fn parse_progress(line: &str) -> Option<f64> {
     }
 
     None
+}
+
+fn focus_badge(label: &'static str, active: bool) -> Span<'static> {
+    if active {
+        Span::styled(
+            format!(" {label} "),
+            Style::default()
+                .fg(Color::Black)
+                .bg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
+    } else {
+        Span::styled(
+            format!(" {label} "),
+            Style::default().fg(Color::Gray).bg(Color::DarkGray),
+        )
+    }
+}
+
+fn status_span(status: Option<&str>) -> Span<'static> {
+    let value = status.unwrap_or("-").trim().to_ascii_lowercase();
+    match value.as_str() {
+        "vip" => Span::styled(" vip ", Style::default().fg(Color::Black).bg(Color::Green)),
+        "trusted" => {
+            Span::styled(" trusted ", Style::default().fg(Color::Black).bg(Color::Yellow))
+        }
+        "-" | "" => Span::styled(" - ", Style::default().fg(Color::DarkGray)),
+        other => Span::styled(
+            format!(" {other} "),
+            Style::default().fg(Color::White).bg(Color::Blue),
+        ),
+    }
+}
+
+fn progress_bar(ratio: f64, width: usize) -> String {
+    let ratio = ratio.clamp(0.0, 1.0);
+    let filled = (ratio * width as f64).round() as usize;
+    let empty = width.saturating_sub(filled);
+    format!("{}{}", "█".repeat(filled), "░".repeat(empty))
 }
 
 #[cfg(test)]

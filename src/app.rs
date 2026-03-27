@@ -7,7 +7,7 @@ use serde::Serialize;
 
 use crate::cache::SearchCache;
 use crate::cli::{Cli, Commands, LuckyArgs, SearchArgs, SetupArgs, TuiArgs};
-use crate::config::{AppConfig, default_config_path};
+use crate::config::{AppConfig, TransmissionClient, default_config_path};
 use crate::downloader::Downloader;
 use crate::downloader::system::SystemDownloader;
 use crate::downloader::transmission::TransmissionDownloader;
@@ -15,6 +15,7 @@ use crate::indexer::Indexer;
 use crate::indexer::pirate_bay::PirateBayIndexer;
 use crate::model::{DownloaderKind, IndexerKind, SearchSort, Torrent};
 use crate::output::{print_json, print_search_table, print_torrent_info};
+use crate::setup::run_setup_wizard;
 use crate::tui::run_search_tui;
 use crate::util::{command_exists, parse_size_filter, transmission_cli_missing_message};
 
@@ -88,10 +89,12 @@ impl App {
                     ))?;
                 } else {
                     println!(
-                        "Added '{}' via {}",
-                        torrent.name,
-                        self.action_target(downloader_kind, cli.global.open)
+                        "{}",
+                        self.dispatch_message(&torrent.name, downloader_kind, cli.global.open)
                     );
+                    if let Some(hint) = self.progress_hint(downloader_kind, cli.global.open) {
+                        println!("{hint}");
+                    }
                 }
                 Ok(())
             }
@@ -161,11 +164,10 @@ impl App {
                 let torrent = results.swap_remove(index);
                 self.dispatch_torrent(&torrent, downloader_kind, open)
                     .await?;
-                println!(
-                    "Added '{}' via {}",
-                    torrent.name,
-                    self.action_target(downloader_kind, open)
-                );
+                println!("{}", self.dispatch_message(&torrent.name, downloader_kind, open));
+                if let Some(hint) = self.progress_hint(downloader_kind, open) {
+                    println!("{hint}");
+                }
             }
             return Ok(());
         }
@@ -244,11 +246,13 @@ impl App {
             print_torrent_info(&chosen.torrent);
         } else {
             println!(
-                "Added '{}' via {} (score {:.2})",
-                chosen.torrent.name,
-                self.action_target(downloader_kind, open),
+                "{} (score {:.2})",
+                self.dispatch_message(&chosen.torrent.name, downloader_kind, open),
                 chosen.score
             );
+            if let Some(hint) = self.progress_hint(downloader_kind, open) {
+                println!("{hint}");
+            }
         }
 
         Ok(())
@@ -272,12 +276,27 @@ impl App {
         }
 
         let limit = args.limit.unwrap_or(default_limit);
-        let results = self
-            .load_search_results(indexer_kind, &args.query, limit, cache)
-            .await?;
-        let results = sort_results(results, args.sort);
+        let app = self.clone();
+        let cache = cache.clone();
+        let handle = tokio::runtime::Handle::current();
+        let sort = args.sort;
+        let search = move |query: &str| -> Result<Vec<Torrent>> {
+            let app = app.clone();
+            let cache = cache.clone();
+            let handle = handle.clone();
+            let query = query.to_string();
 
-        run_search_tui(args.query, results, self.config.transmission.clone())
+            std::thread::spawn(move || {
+                handle.block_on(async move {
+                    let results = app.load_search_results(indexer_kind, &query, limit, &cache).await?;
+                    Ok(sort_results(results, sort))
+                })
+            })
+            .join()
+            .map_err(|_| anyhow!("search thread panicked"))?
+        };
+
+        run_search_tui(args.query, self.config.transmission.clone(), search)
     }
 
     fn handle_doctor(&self, config_override: Option<PathBuf>, json: bool) -> Result<()> {
@@ -300,6 +319,7 @@ impl App {
                 "built-in defaults".to_string()
             },
             default_downloader: default_downloader.to_string(),
+            transmission_client: self.config.transmission.client.to_string(),
             transmission_cli_installed,
             transmission_remote_installed,
             transmission_daemon_installed,
@@ -330,6 +350,11 @@ impl App {
                 "{} {}",
                 "Default downloader:".bold().blue(),
                 report.default_downloader.as_str().magenta()
+            );
+            println!(
+                "{} {}",
+                "Transmission client:".bold().blue(),
+                report.transmission_client.as_str().magenta()
             );
             println!(
                 "{} {}",
@@ -375,18 +400,17 @@ impl App {
         json: bool,
         args: SetupArgs,
     ) -> Result<()> {
-        let mut config = self.config.clone();
-        config.defaults.downloader = DownloaderKind::Transmission;
-        if let Some(download_dir) = args.download_dir {
-            config.transmission.download_dir = Some(download_dir.display().to_string());
+        if json {
+            bail!("--json is not supported with the interactive setup command");
         }
 
-        let saved_path = config.save(config_override).await?;
+        let setup = run_setup_wizard(config_override, self.config.clone(), &args, false).await?;
         let cli_installed = command_exists("transmission-cli");
         let output = SetupOutput {
-            config_path: saved_path.display().to_string(),
-            default_downloader: config.defaults.downloader.to_string(),
-            download_dir: config.transmission.download_dir.clone(),
+            config_path: setup.path.display().to_string(),
+            default_downloader: setup.config.defaults.downloader.to_string(),
+            transmission_client: setup.config.transmission.client.to_string(),
+            download_dir: setup.config.transmission.download_dir.clone(),
             transmission_cli_installed: cli_installed,
             transmission_cli_hint: (!cli_installed).then_some(transmission_cli_missing_message()),
         };
@@ -396,6 +420,7 @@ impl App {
         } else {
             println!("Wrote config to {}", output.config_path);
             println!("Default downloader set to {}", output.default_downloader);
+            println!("Transmission client: {}", output.transmission_client);
             if let Some(download_dir) = output.download_dir {
                 println!("Transmission download dir: {download_dir}");
             }
@@ -469,6 +494,44 @@ impl App {
             }
         }
     }
+
+    fn dispatch_message(&self, torrent_name: &str, downloader_kind: DownloaderKind, open: bool) -> String {
+        if open || matches!(downloader_kind, DownloaderKind::System) {
+            return format!("Opened '{}' via system handler", torrent_name);
+        }
+
+        match downloader_kind {
+            DownloaderKind::Transmission => match self.config.transmission.client {
+                TransmissionClient::Cli => format!(
+                    "Started background download for '{}' via transmission-cli",
+                    torrent_name
+                ),
+                TransmissionClient::Rpc => {
+                    format!("Submitted '{}' to Transmission RPC", torrent_name)
+                }
+                TransmissionClient::Auto => {
+                    format!("Submitted '{}' via transmission", torrent_name)
+                }
+            },
+            DownloaderKind::Qbittorrent | DownloaderKind::Aria2 => {
+                format!("Added '{}' via {}", torrent_name, self.action_target(downloader_kind, false))
+            }
+            DownloaderKind::System => format!("Opened '{}' via system handler", torrent_name),
+        }
+    }
+
+    fn progress_hint(&self, downloader_kind: DownloaderKind, open: bool) -> Option<&'static str> {
+        if open {
+            return None;
+        }
+
+        match downloader_kind {
+            DownloaderKind::Transmission => {
+                Some("Use `pirate-ctl tui <query>` if you want live progress in the terminal.")
+            }
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -512,6 +575,7 @@ struct DoctorReport {
     config_exists: bool,
     config_source: String,
     default_downloader: String,
+    transmission_client: String,
     transmission_cli_installed: bool,
     transmission_remote_installed: bool,
     transmission_daemon_installed: bool,
@@ -523,6 +587,7 @@ struct DoctorReport {
 struct SetupOutput {
     config_path: String,
     default_downloader: String,
+    transmission_client: String,
     download_dir: Option<String>,
     transmission_cli_installed: bool,
     transmission_cli_hint: Option<String>,

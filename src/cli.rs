@@ -78,7 +78,7 @@ pub struct LuckyArgs {
 
 #[derive(Debug, Args)]
 pub struct TuiArgs {
-    pub query: String,
+    pub query: Option<String>,
     #[arg(long)]
     pub limit: Option<usize>,
     #[arg(long, value_enum, default_value_t = SearchSort::Seeders)]
