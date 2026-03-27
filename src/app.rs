@@ -503,14 +503,14 @@ impl App {
         match downloader_kind {
             DownloaderKind::Transmission => match self.config.transmission.client {
                 TransmissionClient::Cli => format!(
-                    "Started background download for '{}' via transmission-cli",
+                    "Finished download for '{}' via transmission-cli",
                     torrent_name
                 ),
                 TransmissionClient::Rpc => {
                     format!("Submitted '{}' to Transmission RPC", torrent_name)
                 }
                 TransmissionClient::Auto => {
-                    format!("Submitted '{}' via transmission", torrent_name)
+                    format!("Finished processing '{}' via transmission", torrent_name)
                 }
             },
             DownloaderKind::Qbittorrent | DownloaderKind::Aria2 => {
@@ -526,9 +526,7 @@ impl App {
         }
 
         match downloader_kind {
-            DownloaderKind::Transmission => {
-                Some("Use `pirate-ctl tui <query>` if you want live progress in the terminal.")
-            }
+            DownloaderKind::Transmission => None,
             _ => None,
         }
     }

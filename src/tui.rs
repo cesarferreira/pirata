@@ -3,7 +3,7 @@ use std::io::{self, BufReader, Read};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
@@ -20,6 +20,7 @@ use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wra
 
 use crate::config::TransmissionConfig;
 use crate::model::Torrent;
+use crate::state::{DetachedDownloadRecord, load_recent_detached_downloads};
 use crate::util::{ensure_transmission_cli_available, format_size};
 
 const MAX_LOG_LINES: usize = 14;
@@ -97,18 +98,22 @@ where
     F: FnMut(&str) -> Result<Vec<Torrent>>,
 {
     fn new(initial_query: Option<String>, transmission: TransmissionConfig, search: F) -> Result<Self> {
+        let detached_downloads = load_recent_detached_downloads(24)?
+            .into_iter()
+            .map(DownloadSession::from_detached_record)
+            .collect();
         let mut app = Self {
             query_input: initial_query.unwrap_or_default(),
             query: None,
             results: Vec::new(),
             selected_result: 0,
             selected_download: 0,
-            downloads: Vec::new(),
+            downloads: detached_downloads,
             transmission,
             should_quit: false,
             tick: 0,
             focus: FocusPane::Query,
-            status_message: "Type a query and press Enter to search.".to_string(),
+            status_message: "Type a query and press Enter to search. Detached CLI launches appear below.".to_string(),
             search,
         };
         if !app.query_input.trim().is_empty() {
@@ -414,10 +419,14 @@ where
             }
             KeyCode::Char('d') => {
                 if let Some(download) = self.downloads.get_mut(self.selected_download) {
-                    if !download.is_finished() {
+                    if download.is_managed_active() {
                         let name = download.torrent.name.clone();
                         download.abort()?;
                         self.status_message = format!("Aborted '{name}'.");
+                    } else if matches!(download.tracking, DownloadTracking::Detached) {
+                        self.status_message =
+                            "That row was started outside the TUI and cannot be stopped here."
+                                .to_string();
                     }
                 }
             }
@@ -468,12 +477,15 @@ where
     }
 
     fn active_downloads(&self) -> usize {
-        self.downloads.iter().filter(|download| !download.is_finished()).count()
+        self.downloads
+            .iter()
+            .filter(|download| download.is_managed_active())
+            .count()
     }
 
     fn abort_all_downloads(&mut self) -> Result<()> {
         for download in &mut self.downloads {
-            if !download.is_finished() {
+            if download.is_managed_active() {
                 download.abort()?;
             }
         }
@@ -522,8 +534,8 @@ where
                     Span::raw(selected.uploaded_by.clone().unwrap_or_else(|| "-".to_string())),
                 ]),
                 Line::from(""),
-                Line::from("Enter starts a background download tracked below."),
-                Line::from("Press / for a fresh search without leaving the TUI."),
+                Line::from("Enter starts a tracked download in this TUI session."),
+                Line::from("Detached downloads started elsewhere also appear below, without live progress."),
             ]
         } else if let Some(query) = &self.query {
             vec![
@@ -598,8 +610,9 @@ where
 
 struct DownloadSession {
     torrent: Torrent,
+    tracking: DownloadTracking,
     child: Option<Child>,
-    receiver: Receiver<DownloadEvent>,
+    receiver: Option<Receiver<DownloadEvent>>,
     logs: VecDeque<String>,
     progress: Option<f64>,
     status_text: String,
@@ -615,8 +628,9 @@ impl DownloadSession {
 
         Ok(Self {
             torrent,
+            tracking: DownloadTracking::Managed,
             child: Some(child),
-            receiver,
+            receiver: Some(receiver),
             logs,
             progress: None,
             status_text: "Connecting to peers...".to_string(),
@@ -625,8 +639,40 @@ impl DownloadSession {
         })
     }
 
+    fn from_detached_record(record: DetachedDownloadRecord) -> Self {
+        let elapsed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .saturating_sub(record.started_unix_secs);
+        let mut logs = VecDeque::new();
+        logs.push_back(format!(
+            "Detached transmission-cli launch (pid {}) started outside the TUI.",
+            record.pid
+        ));
+        if let Some(download_dir) = record.download_dir.as_deref() {
+            logs.push_back(format!("Download dir: {download_dir}"));
+        }
+        logs.push_back(
+            "Live progress is only available for downloads started from inside this TUI session."
+                .to_string(),
+        );
+
+        Self {
+            torrent: record.torrent,
+            tracking: DownloadTracking::Detached,
+            child: None,
+            receiver: None,
+            logs,
+            progress: None,
+            status_text: "Detached CLI download. Progress cannot be attached after launch.".to_string(),
+            started_at: Instant::now() - Duration::from_secs(elapsed),
+            outcome: None,
+        }
+    }
+
     fn drain_events(&mut self) {
-        while let Ok(event) = self.receiver.try_recv() {
+        while let Some(event) = self.receiver.as_ref().and_then(|receiver| receiver.try_recv().ok()) {
             match event {
                 DownloadEvent::Output(line) => {
                     if let Some(progress) = parse_progress(&line) {
@@ -673,6 +719,11 @@ impl DownloadSession {
     }
 
     fn abort(&mut self) -> Result<()> {
+        if matches!(self.tracking, DownloadTracking::Detached) {
+            self.status_text = "Detached download cannot be controlled from this TUI.".to_string();
+            self.push_log("This row was loaded from saved state and cannot be aborted here.".to_string());
+            return Ok(());
+        }
         if let Some(mut child) = self.child.take() {
             child
                 .kill()
@@ -689,9 +740,15 @@ impl DownloadSession {
         self.outcome.is_some()
     }
 
+    fn is_managed_active(&self) -> bool {
+        matches!(self.tracking, DownloadTracking::Managed) && !self.is_finished()
+    }
+
     fn progress_ratio(&self, tick: usize) -> f64 {
         if let Some(progress) = self.progress {
             progress
+        } else if matches!(self.tracking, DownloadTracking::Detached) {
+            0.18
         } else if self.is_finished() {
             1.0
         } else {
@@ -707,6 +764,8 @@ impl DownloadSession {
     fn progress_label(&self, tick: usize) -> String {
         if let Some(progress) = self.progress {
             format!("{:.1}% | {}", progress * 100.0, self.status_text)
+        } else if matches!(self.tracking, DownloadTracking::Detached) {
+            self.status_text.clone()
         } else if self.is_finished() {
             self.status_text.clone()
         } else {
@@ -722,6 +781,8 @@ impl DownloadSession {
     fn progress_summary(&self, tick: usize) -> String {
         if let Some(progress) = self.progress {
             format!("{:>5.1}%", progress * 100.0)
+        } else if matches!(self.tracking, DownloadTracking::Detached) {
+            " ext ".to_string()
         } else if self.is_finished() {
             "100.0%".to_string()
         } else {
@@ -731,6 +792,10 @@ impl DownloadSession {
     }
 
     fn status_badge(&self, tick: usize) -> Span<'static> {
+        if matches!(self.tracking, DownloadTracking::Detached) {
+            return Span::styled(" ext ", Style::default().fg(Color::Black).bg(Color::Blue));
+        }
+
         match self.outcome {
             Some(DownloadOutcome::Success) => {
                 Span::styled(" done ", Style::default().fg(Color::Black).bg(Color::Green))
@@ -770,6 +835,11 @@ enum DownloadOutcome {
     Success,
     Failed,
     Aborted,
+}
+
+enum DownloadTracking {
+    Managed,
+    Detached,
 }
 
 enum DownloadEvent {
