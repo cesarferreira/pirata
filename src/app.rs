@@ -165,6 +165,9 @@ impl App {
                 .interact_opt()?;
             if let Some(index) = selection {
                 let torrent = results.swap_remove(index);
+                let torrent = self
+                    .hydrate_torrent_for_download(indexer_kind, torrent)
+                    .await?;
                 self.dispatch_torrent(&torrent, downloader_kind, open)
                     .await?;
                 println!("{}", self.dispatch_message(&torrent.name, downloader_kind, open));
@@ -224,9 +227,12 @@ impl App {
         let Some(chosen) = candidates.into_iter().next() else {
             bail!("no torrent matched the lucky filters");
         };
+        let torrent = self
+            .hydrate_torrent_for_download(indexer_kind, chosen.torrent)
+            .await?;
 
         if !args.dry_run {
-            self.dispatch_torrent(&chosen.torrent, downloader_kind, open)
+            self.dispatch_torrent(&torrent, downloader_kind, open)
                 .await?;
         }
 
@@ -239,18 +245,18 @@ impl App {
                 },
                 downloader: self.action_target(downloader_kind, open).to_string(),
                 score: chosen.score,
-                torrent: chosen.torrent,
+                torrent,
             })?;
         } else if args.dry_run {
             println!(
                 "Selected '{}' (score {:.2})",
-                chosen.torrent.name, chosen.score
+                torrent.name, chosen.score
             );
-            print_torrent_info(&chosen.torrent);
+            print_torrent_info(&torrent);
         } else {
             println!(
                 "{} (score {:.2})",
-                self.dispatch_message(&chosen.torrent.name, downloader_kind, open),
+                self.dispatch_message(&torrent.name, downloader_kind, open),
                 chosen.score
             );
             if let Some(hint) = self.progress_hint(downloader_kind, open) {
@@ -501,6 +507,22 @@ impl App {
 
         let downloader = self.downloader(downloader_kind)?;
         downloader.add_torrent(torrent).await
+    }
+
+    async fn hydrate_torrent_for_download(
+        &self,
+        indexer_kind: IndexerKind,
+        torrent: Torrent,
+    ) -> Result<Torrent> {
+        if torrent.magnet.is_some() {
+            return Ok(torrent);
+        }
+
+        let indexer = self.indexer(indexer_kind)?;
+        match indexer.info(&torrent.id).await {
+            Ok(enriched) if enriched.magnet.is_some() => Ok(enriched),
+            Ok(_) | Err(_) => Ok(torrent),
+        }
     }
 
     fn indexer(&self, kind: IndexerKind) -> Result<Box<dyn Indexer>> {

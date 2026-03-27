@@ -162,6 +162,14 @@ where
         .filter(|item| !item.trim().is_empty()))
 }
 
+pub fn deserialize_string_from_any<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = StringOrInt::deserialize(deserializer)?;
+    Ok(value.into_string())
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
 enum StringOrInt {
