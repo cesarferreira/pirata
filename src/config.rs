@@ -106,7 +106,7 @@ fn default_indexer() -> IndexerKind {
 }
 
 fn default_downloader() -> DownloaderKind {
-    DownloaderKind::Transmission
+    DownloaderKind::System
 }
 
 fn default_limit() -> usize {
@@ -119,4 +119,17 @@ fn default_transmission_rpc_url() -> String {
 
 fn default_cache_ttl_minutes() -> u64 {
     5
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AppConfig;
+    use crate::model::DownloaderKind;
+
+    #[test]
+    fn defaults_to_system_downloader() {
+        let config = AppConfig::default();
+
+        assert_eq!(config.defaults.downloader, DownloaderKind::System);
+    }
 }
