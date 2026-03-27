@@ -320,6 +320,7 @@ impl App {
             },
             default_downloader: default_downloader.to_string(),
             transmission_client: self.config.transmission.client.to_string(),
+            transmission_download_target: self.config.transmission.download_target_display(),
             transmission_cli_installed,
             transmission_remote_installed,
             transmission_daemon_installed,
@@ -355,6 +356,11 @@ impl App {
                 "{} {}",
                 "Transmission client:".bold().blue(),
                 report.transmission_client.as_str().magenta()
+            );
+            println!(
+                "{} {}",
+                "Download target:".bold().blue(),
+                report.transmission_download_target.as_str().white()
             );
             println!(
                 "{} {}",
@@ -574,6 +580,7 @@ struct DoctorReport {
     config_source: String,
     default_downloader: String,
     transmission_client: String,
+    transmission_download_target: String,
     transmission_cli_installed: bool,
     transmission_remote_installed: bool,
     transmission_daemon_installed: bool,

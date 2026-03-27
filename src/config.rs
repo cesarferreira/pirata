@@ -1,10 +1,12 @@
 use std::fmt;
+use std::fs as stdfs;
 use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use directories::{BaseDirs, ProjectDirs};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tokio::fs;
 
 use crate::model::{DownloaderKind, IndexerKind};
@@ -59,6 +61,15 @@ impl Default for TransmissionConfig {
             password: None,
             download_dir: None,
         }
+    }
+}
+
+impl TransmissionConfig {
+    pub fn download_target_display(&self) -> String {
+        self.download_dir
+            .clone()
+            .or_else(transmission_default_download_dir)
+            .unwrap_or_else(|| "Transmission default download directory".to_string())
     }
 }
 
@@ -142,6 +153,47 @@ fn default_transmission_client() -> TransmissionClient {
 
 fn default_cache_ttl_minutes() -> u64 {
     5
+}
+
+fn transmission_default_download_dir() -> Option<String> {
+    transmission_settings_candidates()
+        .into_iter()
+        .find_map(|path| read_transmission_download_dir(&path))
+}
+
+fn transmission_settings_candidates() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    if let Some(base_dirs) = BaseDirs::new() {
+        let home = base_dirs.home_dir();
+        paths.push(
+            home.join("Library")
+                .join("Application Support")
+                .join("Transmission")
+                .join("settings.json"),
+        );
+        paths.push(
+            home.join(".config")
+                .join("transmission-daemon")
+                .join("settings.json"),
+        );
+        paths.push(
+            home.join(".config")
+                .join("transmission")
+                .join("settings.json"),
+        );
+    }
+
+    paths
+}
+
+fn read_transmission_download_dir(path: &PathBuf) -> Option<String> {
+    let contents = stdfs::read_to_string(path).ok()?;
+    let value: Value = serde_json::from_str(&contents).ok()?;
+    value
+        .get("download-dir")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
