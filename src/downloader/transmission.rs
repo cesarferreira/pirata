@@ -134,13 +134,13 @@ impl TransmissionDownloader {
 #[async_trait]
 impl Downloader for TransmissionDownloader {
     async fn add_magnet(&self, magnet: &str) -> Result<()> {
-        match self.add_via_rpc(magnet).await {
+        match self.add_via_standalone_cli(magnet) {
             Ok(()) => Ok(()),
-            Err(rpc_error) => match self.add_via_cli(magnet).await {
+            Err(cli_error) => match self.add_via_rpc(magnet).await {
                 Ok(()) => Ok(()),
-                Err(remote_error) => self.add_via_standalone_cli(magnet).map_err(|cli_error| {
+                Err(rpc_error) => self.add_via_cli(magnet).await.map_err(|remote_error| {
                     anyhow!(
-                        "{rpc_error}; transmission-remote fallback also failed: {remote_error}; standalone CLI fallback also failed: {cli_error}"
+                        "standalone transmission-cli failed: {cli_error}; Transmission RPC also failed: {rpc_error}; transmission-remote fallback also failed: {remote_error}"
                     )
                 }),
             },
