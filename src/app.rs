@@ -17,7 +17,7 @@ use crate::indexer::pirate_bay::PirateBayIndexer;
 use crate::model::{DownloaderKind, IndexerKind, SearchSort, Torrent};
 use crate::output::{print_json, print_search_table, print_torrent_info};
 use crate::setup::run_setup_wizard;
-use crate::tui::run_search_tui;
+use crate::tui::{TuiDownloader, run_search_tui};
 use crate::util::{
     aria2_missing_message, command_exists, parse_size_filter, transmission_cli_missing_message,
 };
@@ -270,7 +270,7 @@ impl App {
     async fn handle_tui(
         &self,
         indexer_kind: IndexerKind,
-        _downloader_kind: DownloaderKind,
+        downloader_kind: DownloaderKind,
         open: bool,
         json: bool,
         args: TuiArgs,
@@ -289,8 +289,9 @@ impl App {
         let cache = cache.clone();
         let handle = tokio::runtime::Handle::current();
         let sort = args.sort;
+        let search_app = app.clone();
         let search = move |query: &str| -> Result<Vec<Torrent>> {
-            let app = app.clone();
+            let app = search_app.clone();
             let cache = cache.clone();
             let handle = handle.clone();
             let query = query.to_string();
@@ -305,7 +306,35 @@ impl App {
             .map_err(|_| anyhow!("search thread panicked"))?
         };
 
-        run_search_tui(args.query, self.config.transmission.clone(), search)
+        let hydrate_app = app.clone();
+        let hydrate_handle = tokio::runtime::Handle::current();
+        let hydrate = move |torrent: Torrent| -> Result<Torrent> {
+            let app = hydrate_app.clone();
+            let handle = hydrate_handle.clone();
+
+            std::thread::spawn(move || {
+                handle.block_on(async move {
+                    app.hydrate_torrent_for_download(indexer_kind, torrent).await
+                })
+            })
+            .join()
+            .map_err(|_| anyhow!("hydrate thread panicked"))?
+        };
+
+        let backend = match downloader_kind {
+            DownloaderKind::Transmission => {
+                TuiDownloader::Transmission(self.config.transmission.clone())
+            }
+            DownloaderKind::Aria2 => TuiDownloader::Aria2(self.config.aria2.clone()),
+            DownloaderKind::System => {
+                bail!("the tui command does not support the system downloader; choose aria2 or transmission")
+            }
+            DownloaderKind::Qbittorrent => {
+                bail!("the tui command does not support the qbittorrent downloader yet")
+            }
+        };
+
+        run_search_tui(args.query, backend, search, hydrate)
     }
 
     fn handle_doctor(&self, config_override: Option<PathBuf>, json: bool) -> Result<()> {
