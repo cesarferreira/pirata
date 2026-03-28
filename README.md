@@ -1,12 +1,25 @@
 # pirate-ctl
 
-Usage-focused torrent search and download CLI.
+A torrent CLI built to get from query to download quickly.
+
+## Fast Paths
+
+Use the command that matches how much control you want:
+
+- `pirate-ctl lucky "ubuntu 24.04"` picks the best match and starts downloading immediately
+- `pirate-ctl add 81462446` downloads a known torrent id directly
+- `pirate-ctl search "ubuntu 24.04" --interactive` lets you search, pick, and download in one flow
+- `pirate-ctl tui ubuntu` opens the full-screen picker with live download progress
+
+By default, `search --interactive`, `add`, and `lucky` run `aria2c` in the foreground and wait for the download to finish.
+
+If you switch to the `transmission` downloader, those commands use the configured Transmission client instead.
 
 ## Build
 
 ```bash
-cargo build
-cargo run -- --help
+cargo install --path .
+pirate-ctl --help
 ```
 
 ## Setup
@@ -16,7 +29,7 @@ If no config exists, `pirate-ctl` starts a first-run setup wizard before running
 Run setup explicitly:
 
 ```bash
-cargo run -- setup
+pirate-ctl setup
 ```
 
 The wizard lets you choose:
@@ -30,35 +43,31 @@ The wizard lets you choose:
 Start setup and prefill the download directory prompt:
 
 ```bash
-cargo run -- setup --download-dir ~/Downloads/torrents
+pirate-ctl setup --download-dir ~/Downloads/torrents
 ```
 
 Check local dependencies and active config source:
 
 ```bash
-cargo run -- doctor
-cargo run -- --json doctor
+pirate-ctl doctor
+pirate-ctl --json doctor
 ```
 
 ## Search
 
 ```bash
-cargo run -- search "ubuntu 24.04"
-cargo run -- search "ubuntu 24.04" --sort seeders
-cargo run -- search "ubuntu 24.04" --interactive
-cargo run -- search "ubuntu 24.04" --json
+pirate-ctl search "ubuntu 24.04"
+pirate-ctl search "ubuntu 24.04" --sort seeders
+pirate-ctl search "ubuntu 24.04" --interactive
+pirate-ctl search "ubuntu 24.04" --json
 ```
-
-By default, `search --interactive`, `add`, and `lucky` run `aria2c` in the foreground and wait for the download to finish.
-
-If you switch to the `transmission` downloader, those commands use the configured Transmission client instead.
 
 ## Info and Magnet
 
 ```bash
-cargo run -- info 81462446
-cargo run -- magnet 81462446
-cargo run -- magnet 81462446 --json
+pirate-ctl info 81462446
+pirate-ctl magnet 81462446
+pirate-ctl magnet 81462446 --json
 ```
 
 ## Add
@@ -66,23 +75,23 @@ cargo run -- magnet 81462446 --json
 Add by torrent id:
 
 ```bash
-cargo run -- add 81462446
+pirate-ctl add 81462446
 ```
 
 Force OS magnet handler:
 
 ```bash
-cargo run -- add 81462446 --downloader system
-cargo run -- add 81462446 --open
+pirate-ctl add 81462446 --downloader system
+pirate-ctl add 81462446 --open
 ```
 
 ## Lucky
 
 ```bash
-cargo run -- lucky "ubuntu server 24.04"
-cargo run -- lucky "ubuntu server 24.04" --dry-run
-cargo run -- lucky "ubuntu server 24.04" --min-seeders 5 --trusted-only
-cargo run -- lucky "ubuntu server 24.04" --min-size 1GB --max-size 5GB
+pirate-ctl lucky "ubuntu server 24.04"
+pirate-ctl lucky "ubuntu server 24.04" --dry-run
+pirate-ctl lucky "ubuntu server 24.04" --min-seeders 5 --trusted-only
+pirate-ctl lucky "ubuntu server 24.04" --min-size 1GB --max-size 5GB
 ```
 
 ## TUI
@@ -90,9 +99,9 @@ cargo run -- lucky "ubuntu server 24.04" --min-size 1GB --max-size 5GB
 Full-screen picker plus foreground `transmission-cli` progress UI:
 
 ```bash
-cargo run -- tui
-cargo run -- tui ubuntu
-cargo run -- tui "ubuntu 24.04" --sort seeders
+pirate-ctl tui
+pirate-ctl tui ubuntu
+pirate-ctl tui "ubuntu 24.04" --sort seeders
 ```
 
 Downloads started inside the TUI have live progress in the dashboard.
@@ -130,7 +139,7 @@ Default config path:
 Write it with:
 
 ```bash
-cargo run -- setup
+pirate-ctl setup
 ```
 
 ## Useful Commands
@@ -139,7 +148,7 @@ cargo run -- setup
 cargo fmt
 RUSTC_WRAPPER= cargo check
 RUSTC_WRAPPER= cargo test
-RUSTC_WRAPPER= cargo run -- doctor
-RUSTC_WRAPPER= cargo run -- lucky ubuntu
-RUSTC_WRAPPER= cargo run -- tui ubuntu
+pirate-ctl doctor
+pirate-ctl lucky ubuntu
+pirate-ctl tui ubuntu
 ```
