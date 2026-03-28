@@ -17,6 +17,27 @@ By default, `search --interactive`, `add`, and `lucky` run `aria2c` in the foreg
 
 If you switch to the `transmission` downloader, those commands use the configured Transmission client instead.
 
+## Quick Download Examples
+
+Set the download directory once, then use the fast commands:
+
+```bash
+pirate-ctl setup --download-dir ~/media
+pirate-ctl lucky "ubuntu 24.04"
+```
+
+A few common variations:
+
+```bash
+pirate-ctl lucky "ubuntu 24.04" --min-seeders 20 --trusted-only
+pirate-ctl lucky "ubuntu" --dry-run
+pirate-ctl search "ubuntu 24.04" --interactive
+pirate-ctl --downloader transmission lucky "ubuntu 24.04"
+pirate-ctl add 81462446
+```
+
+The download target comes from your configured downloader settings. Use `pirate-ctl setup --download-dir ...` to change it.
+
 ## Build
 
 ```bash
