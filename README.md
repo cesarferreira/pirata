@@ -1,5 +1,7 @@
 # pirate-ctl
 
+![pirate-ctl screenshot](assets/screenshot.png)
+
 A torrent CLI built to get from query to download quickly.
 
 ## Fast Paths
