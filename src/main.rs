@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
 
-use pirate_ctl::app::App;
-use pirate_ctl::cli::Cli;
-use pirate_ctl::config::AppConfig;
+use pirata::app::App;
+use pirata::cli::Cli;
+use pirata::config::AppConfig;
 
 #[tokio::main]
 async fn main() -> Result<()> {
