@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -74,17 +74,23 @@ impl Default for CacheConfig {
 
 impl AppConfig {
     pub async fn load(path_override: Option<PathBuf>) -> Result<Self> {
-        let path = path_override.unwrap_or_else(default_config_path);
-        match fs::read_to_string(&path).await {
-            Ok(contents) => toml::from_str(&contents)
-                .with_context(|| format!("failed to parse config at {}", path.display())),
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(Self::default()),
-            Err(error) => Err(error).with_context(|| format!("failed to read {}", path.display())),
+        if let Some(path) = path_override {
+            return load_config_path(&path).await;
         }
+
+        for path in default_config_candidates() {
+            match load_config_path(&path).await {
+                Ok(config) => return Ok(config),
+                Err(error) if is_missing_file(&error) => continue,
+                Err(error) => return Err(error),
+            }
+        }
+
+        Ok(Self::default())
     }
 
     pub fn cache_dir(&self) -> Result<PathBuf> {
-        let dirs = ProjectDirs::from("dev", "pirate", "pirate-ctl")
+        let dirs = ProjectDirs::from("dev", "pirate", "pirata")
             .context("unable to determine cache directory")?;
         Ok(dirs.cache_dir().to_path_buf())
     }
@@ -95,10 +101,10 @@ impl AppConfig {
 }
 
 pub fn default_config_path() -> PathBuf {
-    let Some(base_dirs) = BaseDirs::new() else {
-        return PathBuf::from(".config/pirate-ctl/config.toml");
-    };
-    base_dirs.home_dir().join(".config/pirate-ctl/config.toml")
+    default_config_candidates()
+        .into_iter()
+        .next()
+        .unwrap_or_else(|| PathBuf::from(".config/pirata/config.toml"))
 }
 
 fn default_indexer() -> IndexerKind {
@@ -119,4 +125,63 @@ fn default_transmission_rpc_url() -> String {
 
 fn default_cache_ttl_minutes() -> u64 {
     5
+}
+
+async fn load_config_path(path: &Path) -> Result<AppConfig> {
+    match fs::read_to_string(path).await {
+        Ok(contents) => toml::from_str(&contents)
+            .with_context(|| format!("failed to parse config at {}", path.display())),
+        Err(error) => Err(error).with_context(|| format!("failed to read {}", path.display())),
+    }
+}
+
+fn default_config_candidates() -> Vec<PathBuf> {
+    let home_dir = BaseDirs::new().map(|dirs| dirs.home_dir().to_path_buf());
+    config_path_candidates(home_dir.as_deref())
+}
+
+fn config_path_candidates(home_dir: Option<&Path>) -> Vec<PathBuf> {
+    match home_dir {
+        Some(base) => vec![
+            base.join(".config/pirata/config.toml"),
+            base.join(".config/pirate-ctl/config.toml"),
+        ],
+        None => vec![
+            PathBuf::from(".config/pirata/config.toml"),
+            PathBuf::from(".config/pirate-ctl/config.toml"),
+        ],
+    }
+}
+
+fn is_missing_file(error: &anyhow::Error) -> bool {
+    error
+        .downcast_ref::<std::io::Error>()
+        .is_some_and(|inner| inner.kind() == std::io::ErrorKind::NotFound)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::config_path_candidates;
+
+    #[test]
+    fn prefers_pirata_config_and_keeps_legacy_fallback() {
+        let candidates = config_path_candidates(Some(Path::new("/tmp/home")));
+        assert_eq!(
+            candidates[0],
+            Path::new("/tmp/home/.config/pirata/config.toml")
+        );
+        assert_eq!(
+            candidates[1],
+            Path::new("/tmp/home/.config/pirate-ctl/config.toml")
+        );
+    }
+
+    #[test]
+    fn uses_relative_candidates_when_home_is_unavailable() {
+        let candidates = config_path_candidates(None);
+        assert_eq!(candidates[0], Path::new(".config/pirata/config.toml"));
+        assert_eq!(candidates[1], Path::new(".config/pirate-ctl/config.toml"));
+    }
 }

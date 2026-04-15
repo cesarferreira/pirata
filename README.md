@@ -1,6 +1,6 @@
-# pirate-ctl
+# pirata
 
-`pirate-ctl` is a fast, scriptable Rust CLI for searching torrents, inspecting metadata, extracting magnet links, and sending them directly to a local downloader.
+`pirata` is a fast, scriptable Rust CLI for searching torrents, inspecting metadata, extracting magnet links, and sending them directly to a local downloader.
 
 The current implementation ships with:
 
@@ -8,7 +8,7 @@ The current implementation ships with:
 - Magnet extraction with fallback magnet construction from the info hash
 - Transmission support through RPC, with `transmission-remote` as a fallback
 - System magnet opening via the OS default handler
-- Interactive fuzzy selection for search results
+- Interactive TUI-style search and selection
 - JSON output for automation and shell pipelines
 - Short-lived search result caching
 
@@ -20,17 +20,31 @@ The goal is to make the common terminal workflow short:
 2. Inspect or pick a result
 3. Send it to a downloader without copy-pasting magnet links around
 
-`pirate-ctl` is intended to stay thin. It is not a torrent manager or a daemon. It is an orchestration layer between indexers and downloaders.
+`pirata` is intended to stay thin. It is not a torrent manager or a daemon. It is an orchestration layer between indexers and downloaders.
 
 ## Features
+
+### TUI
+
+```bash
+pirata
+pirata tui
+pirata tui "ubuntu 24.04"
+```
+
+- `pirata` launches the interactive search-and-add flow by default
+- `pirata tui` makes the same mode explicit
+- The interactive mode prompts for a query if you do not pass one
+- `--json` is only available for non-interactive subcommands
 
 ### Search
 
 ```bash
-pirate-ctl search "ubuntu 24.04"
-pirate-ctl search "ubuntu 24.04" --sort seeders
-pirate-ctl search "ubuntu 24.04" --interactive
-pirate-ctl search "ubuntu 24.04" --json
+pirata search "ubuntu 24.04"
+pirata s "ubuntu 24.04"
+pirata search "ubuntu 24.04" --sort seeders
+pirata search "ubuntu 24.04" --interactive
+pirata search "ubuntu 24.04" --json
 ```
 
 - Prints a table with `id`, `name`, `seeders`, `leechers`, `size`, and `status`
@@ -40,9 +54,10 @@ pirate-ctl search "ubuntu 24.04" --json
 ### Info and magnet
 
 ```bash
-pirate-ctl info 81462446
-pirate-ctl magnet 81462446
-pirate-ctl magnet 81462446 --json
+pirata info 81462446
+pirata i 81462446
+pirata magnet 81462446
+pirata m 81462446 --json
 ```
 
 - `info` prints detailed torrent metadata plus the resolved magnet
@@ -51,9 +66,10 @@ pirate-ctl magnet 81462446 --json
 ### Add
 
 ```bash
-pirate-ctl add 81462446
-pirate-ctl add 81462446 --open
-pirate-ctl add 81462446 --downloader system
+pirata add 81462446
+pirata a 81462446
+pirata add 81462446 --open
+pirata add 81462446 --downloader system
 ```
 
 - Fetches torrent info
@@ -64,10 +80,11 @@ pirate-ctl add 81462446 --downloader system
 ### Lucky mode
 
 ```bash
-pirate-ctl lucky "ubuntu server 24.04"
-pirate-ctl lucky "ubuntu server 24.04" --dry-run
-pirate-ctl lucky "ubuntu server 24.04" --min-seeders 5 --trusted-only
-pirate-ctl lucky "ubuntu server 24.04" --min-size 1GB --max-size 5GB
+pirata lucky "ubuntu server 24.04"
+pirata l "ubuntu server 24.04"
+pirata lucky "ubuntu server 24.04" --dry-run
+pirata lucky "ubuntu server 24.04" --min-seeders 5 --trusted-only
+pirata lucky "ubuntu server 24.04" --min-size 1GB --max-size 5GB
 ```
 
 Lucky mode searches, scores, filters, selects the best candidate, and optionally adds it.
@@ -89,7 +106,7 @@ These flags work across commands:
 --json
 --indexer piratebay
 --downloader transmission|qbittorrent|aria2|system
---config ~/.config/pirate-ctl/config.toml
+--config ~/.config/pirata/config.toml
 --open
 ```
 
@@ -104,7 +121,7 @@ Notes:
 
 ```bash
 cargo build --release
-./target/release/pirate-ctl --help
+./target/release/pirata --help
 ```
 
 ### Install into Cargo's bin directory
@@ -115,7 +132,13 @@ cargo install --path .
 
 ## Configuration
 
-By default, `pirate-ctl` reads:
+By default, `pirata` reads:
+
+```text
+~/.config/pirata/config.toml
+```
+
+Legacy fallback:
 
 ```text
 ~/.config/pirate-ctl/config.toml

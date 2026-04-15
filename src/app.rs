@@ -1,9 +1,12 @@
+use std::time::Duration;
+
 use anyhow::{Result, anyhow, bail};
-use dialoguer::{FuzzySelect, theme::ColorfulTheme};
+use dialoguer::{FuzzySelect, Input, theme::ColorfulTheme};
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
 
 use crate::cache::SearchCache;
-use crate::cli::{Cli, Commands, LuckyArgs, SearchArgs};
+use crate::cli::{Cli, Commands, LuckyArgs, SearchArgs, TuiArgs};
 use crate::config::AppConfig;
 use crate::downloader::Downloader;
 use crate::downloader::system::SystemDownloader;
@@ -25,6 +28,7 @@ impl App {
     }
 
     pub async fn run(&self, cli: Cli) -> Result<()> {
+        let mode = resolve_run_mode(&cli)?;
         let indexer_kind = cli.global.indexer.unwrap_or(self.config.defaults.indexer);
         let downloader_kind = cli
             .global
@@ -33,8 +37,19 @@ impl App {
         let limit = self.config.defaults.search_limit;
         let cache = SearchCache::new(self.config.cache_dir()?, self.config.cache_ttl());
 
-        match cli.command {
-            Commands::Search(args) => {
+        match mode {
+            RunMode::Tui(args) => {
+                self.handle_tui(
+                    indexer_kind,
+                    downloader_kind,
+                    cli.global.open,
+                    args,
+                    limit,
+                    &cache,
+                )
+                .await
+            }
+            RunMode::Command(Commands::Search(args)) => {
                 self.handle_search(
                     indexer_kind,
                     downloader_kind,
@@ -46,7 +61,7 @@ impl App {
                 )
                 .await
             }
-            Commands::Info(args) => {
+            RunMode::Command(Commands::Info(args)) => {
                 let indexer = self.indexer(indexer_kind)?;
                 let torrent = indexer.info(&args.id).await?;
                 if cli.global.json {
@@ -56,7 +71,7 @@ impl App {
                 }
                 Ok(())
             }
-            Commands::Magnet(args) => {
+            RunMode::Command(Commands::Magnet(args)) => {
                 let indexer = self.indexer(indexer_kind)?;
                 let torrent = indexer.info(&args.id).await?;
                 let magnet = torrent.resolved_magnet();
@@ -70,7 +85,7 @@ impl App {
                 }
                 Ok(())
             }
-            Commands::Add(args) => {
+            RunMode::Command(Commands::Add(args)) => {
                 let indexer = self.indexer(indexer_kind)?;
                 let torrent = indexer.info(&args.id).await?;
                 self.dispatch_torrent(&torrent, downloader_kind, cli.global.open)
@@ -90,7 +105,7 @@ impl App {
                 }
                 Ok(())
             }
-            Commands::Lucky(args) => {
+            RunMode::Command(Commands::Lucky(args)) => {
                 self.handle_lucky(
                     indexer_kind,
                     downloader_kind,
@@ -102,7 +117,32 @@ impl App {
                 )
                 .await
             }
+            RunMode::Command(Commands::Tui(_)) => unreachable!("interactive mode is handled above"),
         }
+    }
+
+    async fn handle_tui(
+        &self,
+        indexer_kind: IndexerKind,
+        downloader_kind: DownloaderKind,
+        open: bool,
+        args: TuiArgs,
+        default_limit: usize,
+        cache: &SearchCache,
+    ) -> Result<()> {
+        let query = match args.query {
+            Some(query) => query,
+            None => prompt_for_query()?,
+        };
+        self.run_interactive_search(
+            indexer_kind,
+            downloader_kind,
+            open,
+            query,
+            default_limit,
+            cache,
+        )
+        .await
     }
 
     async fn handle_search(
@@ -120,44 +160,23 @@ impl App {
         }
 
         let limit = args.limit.unwrap_or(default_limit);
+        if args.interactive {
+            return self
+                .run_interactive_search(
+                    indexer_kind,
+                    downloader_kind,
+                    open,
+                    args.query,
+                    limit,
+                    cache,
+                )
+                .await;
+        }
+
         let results = self
             .load_search_results(indexer_kind, &args.query, limit, cache)
             .await?;
-        let mut results = sort_results(results, args.sort);
-
-        if args.interactive {
-            if results.is_empty() {
-                bail!("no results found for '{}'", args.query);
-            }
-
-            let items: Vec<String> = results
-                .iter()
-                .map(|torrent| {
-                    format!(
-                        "{} | {} seeders | {} | {}",
-                        torrent.id,
-                        torrent.seeders,
-                        crate::util::format_size(torrent.size_bytes),
-                        torrent.name
-                    )
-                })
-                .collect();
-            let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
-                .with_prompt("Select a torrent to add")
-                .items(&items)
-                .interact_opt()?;
-            if let Some(index) = selection {
-                let torrent = results.swap_remove(index);
-                self.dispatch_torrent(&torrent, downloader_kind, open)
-                    .await?;
-                println!(
-                    "Added '{}' via {}",
-                    torrent.name,
-                    self.action_target(downloader_kind, open)
-                );
-            }
-            return Ok(());
-        }
+        let results = sort_results(results, args.sort);
 
         if json {
             print_json(&results)?;
@@ -260,6 +279,61 @@ impl App {
         Ok(results)
     }
 
+    async fn run_interactive_search(
+        &self,
+        indexer_kind: IndexerKind,
+        downloader_kind: DownloaderKind,
+        open: bool,
+        query: String,
+        limit: usize,
+        cache: &SearchCache,
+    ) -> Result<()> {
+        let mut results = self
+            .load_search_results(indexer_kind, &query, limit, cache)
+            .await?;
+        results = sort_results(results, SearchSort::Seeders);
+        if results.is_empty() {
+            bail!("no results found for '{}'", query);
+        }
+
+        let items: Vec<String> = results
+            .iter()
+            .map(|torrent| {
+                format!(
+                    "{} | {} seeders | {} | {}",
+                    torrent.id,
+                    torrent.seeders,
+                    crate::util::format_size(torrent.size_bytes),
+                    torrent.name
+                )
+            })
+            .collect();
+        let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+            .with_prompt("Select a torrent to add")
+            .items(&items)
+            .interact_opt()?;
+        if let Some(index) = selection {
+            let torrent = results.swap_remove(index);
+            let target = self.action_target(downloader_kind, open);
+            let progress = ProgressBar::new_spinner();
+            progress.set_style(progress_style());
+            progress.set_message(interactive_add_message(&torrent, target));
+            progress.enable_steady_tick(Duration::from_millis(120));
+
+            match self.dispatch_torrent(&torrent, downloader_kind, open).await {
+                Ok(()) => progress.finish_with_message(format!(
+                    "Started download for '{}' via {}",
+                    torrent.name, target
+                )),
+                Err(error) => {
+                    progress.finish_and_clear();
+                    return Err(error);
+                }
+            }
+        }
+        Ok(())
+    }
+
     async fn dispatch_torrent(
         &self,
         torrent: &Torrent,
@@ -348,6 +422,30 @@ struct ScoredTorrent {
     score: f64,
 }
 
+#[derive(Debug)]
+enum RunMode {
+    Tui(TuiArgs),
+    Command(Commands),
+}
+
+fn resolve_run_mode(cli: &Cli) -> Result<RunMode> {
+    match cli.command.clone() {
+        None => {
+            if cli.global.json {
+                bail!("--json cannot be combined with interactive mode");
+            }
+            Ok(RunMode::Tui(TuiArgs { query: None }))
+        }
+        Some(Commands::Tui(args)) => {
+            if cli.global.json {
+                bail!("--json cannot be combined with interactive mode");
+            }
+            Ok(RunMode::Tui(args))
+        }
+        Some(command) => Ok(RunMode::Command(command)),
+    }
+}
+
 fn sort_results(mut results: Vec<Torrent>, sort: SearchSort) -> Vec<Torrent> {
     match sort {
         SearchSort::Seeders => results.sort_by(|left, right| right.seeders.cmp(&left.seeders)),
@@ -369,11 +467,37 @@ fn score_torrent(torrent: &Torrent) -> f64 {
     base + status_bonus - (torrent.leechers as f64 * 0.5)
 }
 
+fn prompt_for_query() -> Result<String> {
+    let query = Input::<String>::with_theme(&ColorfulTheme::default())
+        .with_prompt("Search query")
+        .interact_text()?;
+    let query = query.trim().to_string();
+    if query.is_empty() {
+        bail!("search query cannot be empty");
+    }
+    Ok(query)
+}
+
+fn interactive_add_message(torrent: &Torrent, target: &str) -> String {
+    format!("Starting download for '{}' via {}...", torrent.name, target)
+}
+
+fn progress_style() -> ProgressStyle {
+    ProgressStyle::with_template("{spinner} {msg}")
+        .expect("valid progress template")
+        .tick_chars("|/-\\ ")
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::model::Torrent;
+    use crate::{
+        cli::{Cli, Commands},
+        model::Torrent,
+    };
 
-    use super::score_torrent;
+    use clap::Parser;
+
+    use super::{RunMode, interactive_add_message, resolve_run_mode, score_torrent};
 
     #[test]
     fn lucky_scoring_prefers_vip_seeded_results() {
@@ -398,5 +522,55 @@ mod tests {
         };
 
         assert!(score_torrent(&vip) > score_torrent(&plain));
+    }
+
+    #[test]
+    fn default_invocation_resolves_to_tui_mode() {
+        let cli = Cli::try_parse_from(["pirata"]).expect("cli should parse");
+        let mode = resolve_run_mode(&cli).expect("mode should resolve");
+        assert!(matches!(mode, RunMode::Tui(_)));
+    }
+
+    #[test]
+    fn explicit_tui_mode_rejects_json() {
+        let cli = Cli::try_parse_from(["pirata", "--json"]).expect("cli should parse");
+        let error = resolve_run_mode(&cli).expect_err("mode should reject json");
+        assert!(
+            error
+                .to_string()
+                .contains("cannot be combined with interactive mode")
+        );
+    }
+
+    #[test]
+    fn explicit_subcommands_stay_non_interactive() {
+        let cli = Cli::try_parse_from(["pirata", "search", "ubuntu"]).expect("cli should parse");
+        let mode = resolve_run_mode(&cli).expect("mode should resolve");
+        assert!(matches!(mode, RunMode::Command(Commands::Search(_))));
+    }
+
+    #[test]
+    fn interactive_add_message_mentions_torrent_and_target() {
+        let torrent = Torrent {
+            id: "1".into(),
+            name: "ubuntu".into(),
+            info_hash: "hash1".into(),
+            magnet: None,
+            seeders: 10,
+            leechers: 1,
+            size_bytes: 1,
+            status: None,
+            uploaded_by: None,
+            description: None,
+            category: None,
+            subcategory: None,
+            added: None,
+        };
+
+        let message = interactive_add_message(&torrent, "transmission");
+        assert_eq!(
+            message,
+            "Starting download for 'ubuntu' via transmission..."
+        );
     }
 }

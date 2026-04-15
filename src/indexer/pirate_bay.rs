@@ -21,7 +21,7 @@ pub struct PirateBayIndexer {
 impl PirateBayIndexer {
     pub fn new() -> Result<Self> {
         let client = Client::builder()
-            .user_agent("pirate-ctl/0.1")
+            .user_agent("pirata/0.1")
             .build()
             .context("failed to build HTTP client")?;
         Ok(Self { client })

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use anyhow::{Context, Result, anyhow, bail};
 use async_trait::async_trait;
 use reqwest::{Client, StatusCode, Url};
@@ -16,7 +18,8 @@ pub struct TransmissionDownloader {
 impl TransmissionDownloader {
     pub fn new(config: TransmissionConfig) -> Result<Self> {
         let client = Client::builder()
-            .user_agent("pirate-ctl/0.1")
+            .user_agent("pirata/0.1")
+            .timeout(rpc_timeout())
             .build()
             .context("failed to build HTTP client")?;
         Ok(Self { client, config })
@@ -109,6 +112,10 @@ impl TransmissionDownloader {
     }
 }
 
+fn rpc_timeout() -> Duration {
+    Duration::from_secs(2)
+}
+
 #[async_trait]
 impl Downloader for TransmissionDownloader {
     async fn add_magnet(&self, magnet: &str) -> Result<()> {
@@ -150,4 +157,42 @@ struct TorrentAddArguments<'a> {
 #[derive(Debug, serde::Deserialize)]
 struct RpcResponse {
     result: String,
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use tokio::{net::TcpListener, time::timeout};
+
+    use super::TransmissionDownloader;
+    use crate::config::TransmissionConfig;
+
+    #[tokio::test]
+    async fn rpc_attempt_times_out_quickly_when_server_never_responds() {
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind listener");
+        let address = listener.local_addr().expect("listener address");
+        tokio::spawn(async move {
+            let _ = listener.accept().await;
+            tokio::time::sleep(Duration::from_secs(10)).await;
+        });
+
+        let downloader = TransmissionDownloader::new(TransmissionConfig {
+            rpc_url: format!("http://{address}/transmission/rpc"),
+            username: None,
+            password: None,
+            download_dir: None,
+        })
+        .expect("downloader");
+
+        let result = timeout(
+            Duration::from_secs(3),
+            downloader.add_via_rpc("magnet:?xt=urn:btih:0123456789ABCDEF"),
+        )
+        .await;
+
+        assert!(result.is_ok(), "rpc add attempt exceeded outer timeout");
+    }
 }
