@@ -34,6 +34,8 @@ pirata tui "ubuntu 24.04"
 
 - `pirata` launches the interactive search-and-add flow by default
 - `pirata tui` makes the same mode explicit
+- The interactive mode shows tracked downloads from Transmission plus Pirata's local completed history
+- Completed history entries are hidden automatically if their file or folder is gone
 - The interactive mode prompts for a query if you do not pass one
 - `--json` is only available for non-interactive subcommands
 
@@ -48,7 +50,7 @@ pirata search "ubuntu 24.04" --json
 ```
 
 - Prints a table with `id`, `name`, `seeders`, `leechers`, `size`, and `status`
-- Supports fuzzy interactive selection and immediate add
+- Supports fast arrow-key selection and immediate add
 - Supports JSON output for scripts
 
 ### Info and magnet
@@ -195,6 +197,11 @@ Recent search results are cached for a short period to reduce repeated indexer c
 
 - Cache TTL defaults to 5 minutes
 - Cache location uses the OS cache directory via the `directories` crate
+
+Pirata also keeps a local download history for items it started itself.
+
+- Completed downloads survive relaunches even if Transmission no longer lists them
+- History entries disappear automatically when the downloaded file or folder no longer exists
 
 ## Architecture
 

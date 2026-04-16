@@ -8,6 +8,7 @@ use tokio::process::Command;
 
 use crate::config::TransmissionConfig;
 use crate::downloader::Downloader;
+use crate::model::{DownloaderKind, TrackedDownload};
 
 #[derive(Debug, Clone)]
 pub struct TransmissionDownloader {
@@ -46,7 +47,7 @@ impl TransmissionDownloader {
     async fn send_rpc(
         &self,
         session_id: Option<String>,
-        payload: &TorrentAddRequest<'_>,
+        payload: &impl Serialize,
     ) -> Result<reqwest::Response> {
         let mut request = self.client.post(&self.config.rpc_url).json(payload);
         if let Some(session_id) = session_id {
@@ -56,6 +57,49 @@ impl TransmissionDownloader {
             request = request.basic_auth(username, self.config.password.as_ref());
         }
         Ok(request.send().await?)
+    }
+
+    pub async fn list_downloads(&self) -> Result<Vec<TrackedDownload>> {
+        let request = TorrentGetRequest::new();
+        let response = self.send_rpc(None, &request).await?;
+        let response = if response.status() == StatusCode::CONFLICT {
+            let session_id = response
+                .headers()
+                .get("x-transmission-session-id")
+                .context("Transmission RPC requires a session id but did not provide one")?
+                .to_str()
+                .context("invalid x-transmission-session-id header")?
+                .to_string();
+            self.send_rpc(Some(session_id), &request).await?
+        } else {
+            response
+        };
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            bail!("Transmission RPC returned {status}: {body}");
+        }
+
+        let body: TorrentGetResponse = response.json().await?;
+        if !body.result.eq_ignore_ascii_case("success") {
+            bail!("Transmission RPC error: {}", body.result);
+        }
+
+        Ok(body
+            .arguments
+            .torrents
+            .into_iter()
+            .map(TrackedDownload::from)
+            .collect())
+    }
+
+    pub async fn get_download_by_hash(&self, info_hash: &str) -> Result<Option<TrackedDownload>> {
+        Ok(self
+            .list_downloads()
+            .await?
+            .into_iter()
+            .find(|download| download.info_hash.eq_ignore_ascii_case(info_hash)))
     }
 
     async fn assert_success(response: reqwest::Response) -> Result<()> {
@@ -154,9 +198,75 @@ struct TorrentAddArguments<'a> {
     download_dir: Option<String>,
 }
 
+#[derive(Debug, Serialize)]
+struct TorrentGetRequest {
+    method: &'static str,
+    arguments: TorrentGetArguments,
+}
+
+impl TorrentGetRequest {
+    fn new() -> Self {
+        Self {
+            method: "torrent-get",
+            arguments: TorrentGetArguments {
+                fields: vec![
+                    "hashString",
+                    "name",
+                    "percentDone",
+                    "isFinished",
+                    "downloadDir",
+                ],
+            },
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct TorrentGetArguments {
+    fields: Vec<&'static str>,
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct RpcResponse {
     result: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct TorrentGetResponse {
+    arguments: TorrentGetResponseArguments,
+    result: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct TorrentGetResponseArguments {
+    torrents: Vec<TransmissionTorrent>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct TransmissionTorrent {
+    #[serde(rename = "hashString")]
+    hash_string: String,
+    name: String,
+    #[serde(rename = "percentDone")]
+    percent_done: f64,
+    #[serde(rename = "isFinished")]
+    is_finished: bool,
+    #[serde(rename = "downloadDir")]
+    download_dir: String,
+}
+
+impl From<TransmissionTorrent> for TrackedDownload {
+    fn from(value: TransmissionTorrent) -> Self {
+        let percent_done = (value.percent_done * 100.0).round().clamp(0.0, 100.0) as u8;
+        Self {
+            info_hash: value.hash_string,
+            name: value.name.clone(),
+            target_path: std::path::PathBuf::from(value.download_dir).join(value.name),
+            downloader: DownloaderKind::Transmission,
+            percent_done,
+            completed: value.is_finished || percent_done >= 100,
+        }
+    }
 }
 
 #[cfg(test)]

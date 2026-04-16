@@ -1,4 +1,5 @@
 use std::fmt;
+use std::path::PathBuf;
 
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
@@ -66,6 +67,16 @@ pub struct Torrent {
     pub category: Option<String>,
     pub subcategory: Option<String>,
     pub added: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct TrackedDownload {
+    pub info_hash: String,
+    pub name: String,
+    pub target_path: PathBuf,
+    pub downloader: DownloaderKind,
+    pub percent_done: u8,
+    pub completed: bool,
 }
 
 impl Torrent {

@@ -2,7 +2,7 @@ use anyhow::Result;
 use comfy_table::{Cell, ContentArrangement, Table, presets::UTF8_FULL};
 use serde::Serialize;
 
-use crate::model::Torrent;
+use crate::model::{Torrent, TrackedDownload};
 use crate::util::format_size;
 
 pub fn print_json<T: Serialize>(value: &T) -> Result<()> {
@@ -58,6 +58,29 @@ pub fn print_torrent_info(torrent: &Torrent) {
         println!();
         println!("{description}");
     }
+}
+
+pub fn print_tracked_downloads(downloads: &[TrackedDownload]) {
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_FULL)
+        .set_content_arrangement(ContentArrangement::DynamicFullWidth)
+        .set_header(vec!["Status", "Name", "Path"]);
+
+    for download in downloads {
+        let status = if download.completed {
+            "done".to_string()
+        } else {
+            format!("{}%", download.percent_done)
+        };
+        table.add_row(vec![
+            Cell::new(status),
+            Cell::new(truncate(&download.name, 60)),
+            Cell::new(truncate(&download.target_path.display().to_string(), 80)),
+        ]);
+    }
+
+    println!("{table}");
 }
 
 fn truncate(value: &str, max_len: usize) -> String {
