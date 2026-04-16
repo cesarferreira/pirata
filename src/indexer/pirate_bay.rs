@@ -3,11 +3,13 @@ use async_trait::async_trait;
 use reqwest::Client;
 use scraper::{Html, Selector};
 use serde::Deserialize;
+use tokio::process::Command;
 
 use crate::indexer::Indexer;
 use crate::model::Torrent;
 use crate::util::{
-    deserialize_optional_string, deserialize_u32_from_any, deserialize_u64_from_any,
+    command_exists, deserialize_optional_string, deserialize_string_from_any,
+    deserialize_u32_from_any, deserialize_u64_from_any,
 };
 
 const API_BASE: &str = "https://apibay.org";
@@ -44,6 +46,33 @@ impl PirateBayIndexer {
         Ok(document
             .select(&selector)
             .find_map(|element| element.value().attr("href"))
+            .map(ToOwned::to_owned))
+    }
+
+    async fn fetch_magnet_via_cli(&self, id: &str) -> Result<Option<String>> {
+        if !command_exists("piratebay") {
+            return Ok(None);
+        }
+
+        let output = Command::new("piratebay")
+            .arg("--json")
+            .arg("info")
+            .arg(id)
+            .output()
+            .await
+            .context("failed to run piratebay CLI for torrent info")?;
+
+        if !output.status.success() {
+            return Ok(None);
+        }
+
+        let value: serde_json::Value =
+            serde_json::from_slice(&output.stdout).context("failed to parse piratebay CLI JSON")?;
+
+        Ok(value
+            .get("magnet")
+            .and_then(serde_json::Value::as_str)
+            .filter(|value| !value.trim().is_empty())
             .map(ToOwned::to_owned))
     }
 }
@@ -85,6 +114,9 @@ impl Indexer for PirateBayIndexer {
         let item: ApiTorrent = response.json().await?;
         let mut torrent = Torrent::from(item);
         if torrent.magnet.is_none() {
+            torrent.magnet = self.fetch_magnet_via_cli(id).await?;
+        }
+        if torrent.magnet.is_none() {
             torrent.magnet = self.fetch_magnet_from_html(id).await?;
         }
         Ok(torrent)
@@ -93,6 +125,7 @@ impl Indexer for PirateBayIndexer {
 
 #[derive(Debug, Deserialize)]
 struct ApiTorrent {
+    #[serde(deserialize_with = "deserialize_string_from_any")]
     pub id: String,
     pub name: String,
     #[serde(default, deserialize_with = "deserialize_optional_string")]
@@ -111,9 +144,9 @@ struct ApiTorrent {
     pub username: Option<String>,
     #[serde(default)]
     pub descr: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_string")]
     pub category: Option<String>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "deserialize_optional_string")]
     pub subcategory: Option<String>,
     #[serde(default, deserialize_with = "deserialize_optional_u64")]
     pub added: Option<u64>,

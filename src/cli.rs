@@ -33,8 +33,6 @@ pub struct GlobalArgs {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
-    #[command(visible_alias = "t")]
-    Tui(TuiArgs),
     #[command(visible_alias = "s")]
     Search(SearchArgs),
     #[command(visible_alias = "i")]
@@ -45,11 +43,10 @@ pub enum Commands {
     Add(IdArgs),
     #[command(visible_alias = "l")]
     Lucky(LuckyArgs),
-}
-
-#[derive(Debug, Clone, Args)]
-pub struct TuiArgs {
-    pub query: Option<String>,
+    #[command(visible_alias = "t")]
+    Tui(TuiArgs),
+    Doctor,
+    Setup(SetupArgs),
 }
 
 #[derive(Debug, Clone, Args)]
@@ -83,6 +80,21 @@ pub struct LuckyArgs {
     pub min_size: Option<String>,
     #[arg(long)]
     pub max_size: Option<String>,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct TuiArgs {
+    pub query: Option<String>,
+    #[arg(long)]
+    pub limit: Option<usize>,
+    #[arg(long, value_enum, default_value_t = SearchSort::Seeders)]
+    pub sort: SearchSort,
+}
+
+#[derive(Debug, Clone, Args)]
+pub struct SetupArgs {
+    #[arg(long)]
+    pub download_dir: Option<PathBuf>,
 }
 
 #[cfg(test)]
