@@ -1,3 +1,7 @@
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+
 use anyhow::{Result, anyhow, bail};
 use serde::Deserialize;
 use serde::de::{self, Deserializer};
@@ -52,6 +56,87 @@ pub fn format_size(value: u64) -> String {
     }
 }
 
+pub fn ensure_transmission_cli_available() -> Result<()> {
+    if command_exists("transmission-cli") {
+        return Ok(());
+    }
+
+    bail!("{}", transmission_cli_missing_message())
+}
+
+pub fn ensure_aria2_available() -> Result<()> {
+    if command_exists("aria2c") {
+        return Ok(());
+    }
+
+    bail!("{}", aria2_missing_message())
+}
+
+pub fn command_exists(command: &str) -> bool {
+    let candidate = PathBuf::from(command);
+    if candidate.components().count() > 1 {
+        return candidate.is_file();
+    }
+
+    env::var_os("PATH")
+        .is_some_and(|paths| env::split_paths(&paths).any(|dir| dir.join(command).is_file()))
+}
+
+pub fn transmission_cli_missing_message() -> String {
+    if cfg!(target_os = "linux") {
+        if fs::read_to_string("/etc/os-release")
+            .ok()
+            .as_deref()
+            .is_some_and(is_debian_like_os_release)
+        {
+            return "`transmission-cli` was not found in PATH. On Debian/Ubuntu install it with `sudo apt install transmission-cli`.".to_string();
+        }
+
+        return "`transmission-cli` was not found in PATH. Install the `transmission-cli` package for your distribution and ensure it is on PATH.".to_string();
+    }
+
+    if cfg!(target_os = "macos") {
+        return "`transmission-cli` was not found in PATH. Install it with `brew install transmission-cli`.".to_string();
+    }
+
+    "`transmission-cli` was not found in PATH. Install it and ensure it is on PATH.".to_string()
+}
+
+pub fn aria2_missing_message() -> String {
+    if cfg!(target_os = "linux") {
+        if fs::read_to_string("/etc/os-release")
+            .ok()
+            .as_deref()
+            .is_some_and(is_debian_like_os_release)
+        {
+            return "`aria2c` was not found in PATH. On Debian/Ubuntu install it with `sudo apt install aria2`.".to_string();
+        }
+
+        return "`aria2c` was not found in PATH. Install the `aria2` package for your distribution and ensure `aria2c` is on PATH.".to_string();
+    }
+
+    if cfg!(target_os = "macos") {
+        return "`aria2c` was not found in PATH. Install it with `brew install aria2`.".to_string();
+    }
+
+    "`aria2c` was not found in PATH. Install it and ensure it is on PATH.".to_string()
+}
+
+fn is_debian_like_os_release(contents: &str) -> bool {
+    contents.lines().any(|line| {
+        let value = line
+            .strip_prefix("ID=")
+            .or_else(|| line.strip_prefix("ID_LIKE="));
+
+        value.is_some_and(|value| {
+            let value = value.trim_matches('"').to_ascii_lowercase();
+            value
+                .split_whitespace()
+                .any(|part| matches!(part, "debian" | "ubuntu"))
+        })
+    })
+}
+
 pub fn deserialize_u32_from_any<'de, D>(deserializer: D) -> Result<u32, D::Error>
 where
     D: Deserializer<'de>,
@@ -76,6 +161,14 @@ where
     Ok(value
         .map(|item| item.into_string())
         .filter(|item| !item.trim().is_empty()))
+}
+
+pub fn deserialize_string_from_any<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = StringOrInt::deserialize(deserializer)?;
+    Ok(value.into_string())
 }
 
 #[derive(Debug, Deserialize)]
@@ -112,7 +205,7 @@ impl StringOrInt {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_size, parse_size_filter};
+    use super::{format_size, is_debian_like_os_release, parse_size_filter};
 
     #[test]
     fn parses_human_size_filters() {
@@ -127,5 +220,12 @@ mod tests {
         assert_eq!(format_size(999), "999 B");
         assert_eq!(format_size(1024), "1.0 KB");
         assert_eq!(format_size(5 * 1024 * 1024), "5.0 MB");
+    }
+
+    #[test]
+    fn detects_debian_like_os_release() {
+        assert!(is_debian_like_os_release("ID=ubuntu\nID_LIKE=debian"));
+        assert!(is_debian_like_os_release("ID=debian"));
+        assert!(!is_debian_like_os_release("ID=fedora\nID_LIKE=rhel"));
     }
 }

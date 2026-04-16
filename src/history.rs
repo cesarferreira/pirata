@@ -1,12 +1,12 @@
 use std::{
     collections::{HashMap, HashSet},
+    fs as stdfs,
     path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use tokio::fs;
 
 use crate::model::{DownloaderKind, TrackedDownload};
 
@@ -31,26 +31,38 @@ impl DownloadHistory {
     }
 
     pub async fn load(&self) -> Result<Vec<DownloadHistoryEntry>> {
-        let Ok(contents) = fs::read_to_string(&self.path).await else {
+        self.load_blocking()
+    }
+
+    pub fn load_blocking(&self) -> Result<Vec<DownloadHistoryEntry>> {
+        let Ok(contents) = stdfs::read_to_string(&self.path) else {
             return Ok(Vec::new());
         };
         Ok(serde_json::from_str(&contents)?)
     }
 
     pub async fn load_visible(&self) -> Result<Vec<DownloadHistoryEntry>> {
-        let entries = self.load().await?;
+        self.load_visible_blocking()
+    }
+
+    pub fn load_visible_blocking(&self) -> Result<Vec<DownloadHistoryEntry>> {
+        let entries = self.load_blocking()?;
         let mut visible = Vec::with_capacity(entries.len());
         for entry in entries {
-            if !entry.is_completed() || path_exists(&entry.target_path).await {
+            if !entry.is_completed() || path_exists(&entry.target_path) {
                 visible.push(entry);
             }
         }
-        self.save(&visible).await?;
+        self.save_blocking(&visible)?;
         Ok(visible)
     }
 
     pub async fn upsert(&self, entry: DownloadHistoryEntry) -> Result<()> {
-        let mut entries = self.load().await?;
+        self.upsert_blocking(entry)
+    }
+
+    pub fn upsert_blocking(&self, entry: DownloadHistoryEntry) -> Result<()> {
+        let mut entries = self.load_blocking()?;
         if let Some(existing) = entries
             .iter_mut()
             .find(|existing| existing.info_hash == entry.info_hash)
@@ -59,14 +71,18 @@ impl DownloadHistory {
         } else {
             entries.push(entry);
         }
-        self.save(&entries).await
+        self.save_blocking(&entries)
     }
 
     pub async fn save(&self, entries: &[DownloadHistoryEntry]) -> Result<()> {
+        self.save_blocking(entries)
+    }
+
+    pub fn save_blocking(&self, entries: &[DownloadHistoryEntry]) -> Result<()> {
         if let Some(parent) = self.path.parent() {
-            fs::create_dir_all(parent).await?;
+            stdfs::create_dir_all(parent)?;
         }
-        fs::write(&self.path, serde_json::to_string_pretty(entries)?).await?;
+        stdfs::write(&self.path, serde_json::to_string_pretty(entries)?)?;
         Ok(())
     }
 }
@@ -147,8 +163,8 @@ pub fn now_epoch_secs() -> u64 {
         .as_secs()
 }
 
-async fn path_exists(path: &Path) -> bool {
-    fs::metadata(path).await.is_ok()
+fn path_exists(path: &Path) -> bool {
+    path.exists()
 }
 
 #[cfg(test)]

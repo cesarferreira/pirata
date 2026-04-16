@@ -24,9 +24,9 @@ impl fmt::Display for IndexerKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ValueEnum, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum DownloaderKind {
-    #[default]
     Transmission,
     Qbittorrent,
+    #[default]
     Aria2,
     System,
 }
@@ -101,12 +101,27 @@ impl Torrent {
 }
 
 pub fn build_magnet_link(info_hash: &str, name: &str) -> String {
-    format!(
+    let mut magnet = format!(
         "magnet:?xt=urn:btih:{}&dn={}",
         info_hash,
         encode_component(name)
-    )
+    );
+
+    for tracker in DEFAULT_PUBLIC_TRACKERS {
+        magnet.push_str("&tr=");
+        magnet.push_str(&encode_component(tracker));
+    }
+
+    magnet
 }
+
+const DEFAULT_PUBLIC_TRACKERS: &[&str] = &[
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://explodie.org:6969/announce",
+    "https://tracker.opentrackr.org:443/announce",
+];
 
 #[cfg(test)]
 mod tests {
@@ -132,7 +147,7 @@ mod tests {
 
         assert_eq!(
             torrent.resolved_magnet(),
-            "magnet:?xt=urn:btih:ABCDEF&dn=ubuntu%20iso"
+            "magnet:?xt=urn:btih:ABCDEF&dn=ubuntu%20iso&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce&tr=udp%3A%2F%2Fexplodie.org%3A6969%2Fannounce&tr=https%3A%2F%2Ftracker.opentrackr.org%3A443%2Fannounce"
         );
         assert_eq!(
             build_magnet_link("ABCDEF", "ubuntu iso"),
