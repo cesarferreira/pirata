@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use anyhow::{Result, anyhow, bail};
-use dialoguer::{FuzzySelect, Input, theme::ColorfulTheme};
+use dialoguer::{Input, Select, theme::ColorfulTheme};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::Serialize;
 
@@ -11,10 +11,13 @@ use crate::config::AppConfig;
 use crate::downloader::Downloader;
 use crate::downloader::system::SystemDownloader;
 use crate::downloader::transmission::TransmissionDownloader;
+use crate::history::{
+    DownloadHistory, DownloadHistoryEntry, merge_tracked_downloads, now_epoch_secs,
+};
 use crate::indexer::Indexer;
 use crate::indexer::pirate_bay::PirateBayIndexer;
-use crate::model::{DownloaderKind, IndexerKind, SearchSort, Torrent};
-use crate::output::{print_json, print_search_table, print_torrent_info};
+use crate::model::{DownloaderKind, IndexerKind, SearchSort, Torrent, TrackedDownload};
+use crate::output::{print_json, print_search_table, print_torrent_info, print_tracked_downloads};
 use crate::util::parse_size_filter;
 
 #[derive(Debug, Clone)]
@@ -36,6 +39,7 @@ impl App {
             .unwrap_or(self.config.defaults.downloader);
         let limit = self.config.defaults.search_limit;
         let cache = SearchCache::new(self.config.cache_dir()?, self.config.cache_ttl());
+        let history = DownloadHistory::new(self.config.history_path()?);
 
         match mode {
             RunMode::Tui(args) => {
@@ -46,6 +50,7 @@ impl App {
                     args,
                     limit,
                     &cache,
+                    &history,
                 )
                 .await
             }
@@ -58,6 +63,7 @@ impl App {
                     args,
                     limit,
                     &cache,
+                    &history,
                 )
                 .await
             }
@@ -88,7 +94,7 @@ impl App {
             RunMode::Command(Commands::Add(args)) => {
                 let indexer = self.indexer(indexer_kind)?;
                 let torrent = indexer.info(&args.id).await?;
-                self.dispatch_torrent(&torrent, downloader_kind, cli.global.open)
+                self.start_torrent(&torrent, downloader_kind, cli.global.open, &history)
                     .await?;
                 if cli.global.json {
                     print_json(&ActionOutput::added(
@@ -114,6 +120,7 @@ impl App {
                     args,
                     limit,
                     &cache,
+                    &history,
                 )
                 .await
             }
@@ -129,10 +136,20 @@ impl App {
         args: TuiArgs,
         default_limit: usize,
         cache: &SearchCache,
+        history: &DownloadHistory,
     ) -> Result<()> {
         let query = match args.query {
             Some(query) => query,
-            None => prompt_for_query()?,
+            None => {
+                let tracked = self
+                    .load_tracked_downloads(downloader_kind, history)
+                    .await?;
+                if !tracked.is_empty() {
+                    print_tracked_downloads(&tracked);
+                    println!();
+                }
+                prompt_for_query()?
+            }
         };
         self.run_interactive_search(
             indexer_kind,
@@ -141,6 +158,7 @@ impl App {
             query,
             default_limit,
             cache,
+            history,
         )
         .await
     }
@@ -154,6 +172,7 @@ impl App {
         args: SearchArgs,
         default_limit: usize,
         cache: &SearchCache,
+        history: &DownloadHistory,
     ) -> Result<()> {
         if json && args.interactive {
             bail!("--json cannot be combined with --interactive");
@@ -169,6 +188,7 @@ impl App {
                     args.query,
                     limit,
                     cache,
+                    history,
                 )
                 .await;
         }
@@ -195,6 +215,7 @@ impl App {
         args: LuckyArgs,
         default_limit: usize,
         cache: &SearchCache,
+        history: &DownloadHistory,
     ) -> Result<()> {
         let min_size = args
             .min_size
@@ -229,7 +250,7 @@ impl App {
         };
 
         if !args.dry_run {
-            self.dispatch_torrent(&chosen.torrent, downloader_kind, open)
+            self.start_torrent(&chosen.torrent, downloader_kind, open, history)
                 .await?;
         }
 
@@ -287,6 +308,7 @@ impl App {
         query: String,
         limit: usize,
         cache: &SearchCache,
+        history: &DownloadHistory,
     ) -> Result<()> {
         let mut results = self
             .load_search_results(indexer_kind, &query, limit, cache)
@@ -308,9 +330,10 @@ impl App {
                 )
             })
             .collect();
-        let selection = FuzzySelect::with_theme(&ColorfulTheme::default())
+        let selection = Select::with_theme(&ColorfulTheme::default())
             .with_prompt("Select a torrent to add")
             .items(&items)
+            .default(0)
             .interact_opt()?;
         if let Some(index) = selection {
             let torrent = results.swap_remove(index);
@@ -320,7 +343,10 @@ impl App {
             progress.set_message(interactive_add_message(&torrent, target));
             progress.enable_steady_tick(Duration::from_millis(120));
 
-            match self.dispatch_torrent(&torrent, downloader_kind, open).await {
+            match self
+                .start_torrent(&torrent, downloader_kind, open, history)
+                .await
+            {
                 Ok(()) => progress.finish_with_message(format!(
                     "Started download for '{}' via {}",
                     torrent.name, target
@@ -334,36 +360,86 @@ impl App {
         Ok(())
     }
 
-    async fn dispatch_torrent(
+    async fn start_torrent(
         &self,
         torrent: &Torrent,
         downloader_kind: DownloaderKind,
         open: bool,
+        history: &DownloadHistory,
     ) -> Result<()> {
         if open {
             let downloader = SystemDownloader;
             return downloader.add_torrent(torrent).await;
         }
 
-        let downloader = self.downloader(downloader_kind)?;
-        downloader.add_torrent(torrent).await
+        match downloader_kind {
+            DownloaderKind::Transmission => {
+                let downloader = TransmissionDownloader::new(self.config.transmission.clone())?;
+                downloader.add_torrent(torrent).await?;
+                if let Some(download) = self.resolve_tracked_download(&downloader, torrent).await? {
+                    history
+                        .upsert(DownloadHistoryEntry::from_tracked_download(
+                            &download,
+                            now_epoch_secs(),
+                        ))
+                        .await?;
+                }
+                Ok(())
+            }
+            DownloaderKind::System => {
+                let downloader = SystemDownloader;
+                downloader.add_torrent(torrent).await
+            }
+            DownloaderKind::Qbittorrent | DownloaderKind::Aria2 => Err(anyhow!(
+                "{downloader_kind} downloader is not implemented yet"
+            )),
+        }
+    }
+
+    async fn resolve_tracked_download(
+        &self,
+        downloader: &TransmissionDownloader,
+        torrent: &Torrent,
+    ) -> Result<Option<TrackedDownload>> {
+        if let Some(download) = downloader.get_download_by_hash(&torrent.info_hash).await? {
+            return Ok(Some(download));
+        }
+
+        let Some(download_dir) = &self.config.transmission.download_dir else {
+            return Ok(None);
+        };
+
+        Ok(Some(TrackedDownload {
+            info_hash: torrent.info_hash.clone(),
+            name: torrent.name.clone(),
+            target_path: std::path::PathBuf::from(download_dir).join(&torrent.name),
+            downloader: DownloaderKind::Transmission,
+            percent_done: 0,
+            completed: false,
+        }))
+    }
+
+    async fn load_tracked_downloads(
+        &self,
+        downloader_kind: DownloaderKind,
+        history: &DownloadHistory,
+    ) -> Result<Vec<TrackedDownload>> {
+        let history_entries = history.load_visible().await?;
+        let live_downloads = if downloader_kind == DownloaderKind::Transmission {
+            let downloader = TransmissionDownloader::new(self.config.transmission.clone())?;
+            downloader.list_downloads().await.unwrap_or_default()
+        } else {
+            Vec::new()
+        };
+        let (updated_history, tracked) =
+            merge_tracked_downloads(history_entries, live_downloads, now_epoch_secs());
+        history.save(&updated_history).await?;
+        Ok(tracked)
     }
 
     fn indexer(&self, kind: IndexerKind) -> Result<Box<dyn Indexer>> {
         match kind {
             IndexerKind::Piratebay => Ok(Box::new(PirateBayIndexer::new()?)),
-        }
-    }
-
-    fn downloader(&self, kind: DownloaderKind) -> Result<Box<dyn Downloader>> {
-        match kind {
-            DownloaderKind::Transmission => Ok(Box::new(TransmissionDownloader::new(
-                self.config.transmission.clone(),
-            )?)),
-            DownloaderKind::System => Ok(Box::new(SystemDownloader)),
-            DownloaderKind::Qbittorrent | DownloaderKind::Aria2 => {
-                Err(anyhow!("{kind} downloader is not implemented yet"))
-            }
         }
     }
 

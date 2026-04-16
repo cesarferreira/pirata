@@ -95,6 +95,12 @@ impl AppConfig {
         Ok(dirs.cache_dir().to_path_buf())
     }
 
+    pub fn history_path(&self) -> Result<PathBuf> {
+        let dirs = ProjectDirs::from("dev", "pirate", "pirata")
+            .context("unable to determine history directory")?;
+        Ok(dirs.data_local_dir().join("download-history.json"))
+    }
+
     pub fn cache_ttl(&self) -> Duration {
         Duration::from_secs(self.cache.ttl_minutes.saturating_mul(60))
     }
