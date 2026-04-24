@@ -410,6 +410,7 @@ Pattern: overbar + título centrado (full-width) + column split + opções A-G +
 ├────────────┼────────────────────────────────────────┤
 │ LAST SWEEP │ 3/7/0 · 12m · 2h ago                   │
 │ SHEETED    │ 12/45 releases                         │
+│ KB SIZE    │ 12 movies · 850MB                      │
 ├────────────┼────────────────────────────────────────┤
 │ ADVICE     │ 3 downloads rodando ok. tail log pra ver│
 └────────────┴────────────────────────────────────────┘
@@ -435,6 +436,7 @@ Pattern: overbar + título centrado (full-width) + column split + opções A-G +
 │ SWEEP      │ scripts/sheets_sweep.py          [OK]  │
 │ DL DIR     │ ~/claude-code/pirata/downloads   [OK]  │
 │ CONTRACT   │ contact_sheet.py flags intact    [OK]  │
+│ KB DIR     │ ~/claude-code/pirata/kb/         [OK]  │
 ├────────────┼────────────────────────────────────────┤
 │ ADVICE     │ pipeline ok. tudo pronto pra fila.     │
 └────────────┴────────────────────────────────────────┘

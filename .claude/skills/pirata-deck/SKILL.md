@@ -149,6 +149,7 @@ Renderize **painel STATUS** de `menu-style.md`. Conteúdo:
 - Tempo desde último log entry
 - **LAST SWEEP**: tail `logs/sheets_sweep.log` pra última linha `finish` — formato `<done>/<skip>/<fail>` + duração + age (ex: `3/7/0 · 12m · 2h ago`). Absent se nunca rodou.
 - **SHEETED**: count `downloads/*/contact-sheets/*_sheet_*.png` parents vs count de release dirs — `<sheeted>/<total>` (ex: `12/45`).
+- **KB SIZE**: count `kb/per-movie/*.json` files = movies in KB; total disk via `du -sh kb/`. Format: `<N> movies · <size>` (ex: `12 movies · 850MB`). Absent se kb/ não existe ainda.
 
 ### 10 DOCTOR
 Renderize **painel DOCTOR** de `menu-style.md`. Checks:
@@ -159,7 +160,8 @@ Renderize **painel DOCTOR** de `menu-style.md`. Checks:
 - Disk free em `./downloads/`
 - **SWEEP**: `[ -f scripts/sheets_sweep.py ] && python3 -m py_compile scripts/sheets_sweep.py` → `[OK]`/`[FAIL]`
 - **DL DIR**: config `aria2.download_dir` existe e é readable → `[OK]`/`[FAIL]`
-- **CONTRACT**: `python3 scripts/contact_sheet.py --help` contém cada flag que o sweep baked (`--out --threshold --floor --target --cols --rows --width --workers --title`) → `[OK]`/`[FAIL] sheet contract drift`
+- **CONTRACT**: `python3 scripts/contact_sheet.py --help` contém cada flag que o sweep baked (`--out --threshold --floor --target --cols --rows --width --workers --title --kb-export`) → `[OK]`/`[FAIL] sheet contract drift`
+- **KB DIR**: `<repo>/kb/` existe e é writable (sweep cria automaticamente na primeira run com --kb on) → `[OK]`/`[FAIL]`
 
 ### 11 QUEUE (ad-hoc)
 Sem passar por tipo: recebe magnets direto do usuário e passa pro `queue.py`. Útil quando o usuário já tem os magnets (ex: colou de outro contexto).
