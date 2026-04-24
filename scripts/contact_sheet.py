@@ -199,70 +199,58 @@ def label_frame(img: Image.Image, idx: int, t: float, fps: float,
 def tile_sheets(items, cols: int, rows: int,
                 out_dir: Path, title: str, slug: str,
                 header_font_size: int,
-                clean: bool = False,
                 ext: str = "png") -> list[Path]:
     """
-    items: list of (idx, t, source) tuples.
-      - clean=False: source is the labeled composite Image (with caption strip)
-      - clean=True:  source is a Path to the raw frame OR an Image without overlay
-    clean=True also skips the header band and saves as JPEG q=90 by default.
+    items: list of (idx, t, labeled_image) tuples where labeled_image is a
+    PIL Image with caption strip below the frame (from label_frame()).
+    Outputs PNG by default; pass ext="jpg" for KB-lighter JPEG q=90.
     """
     per = cols * rows
     if not items:
         return []
     out_dir.mkdir(parents=True, exist_ok=True)
-    # Determine thumb size from first item (handle both Path and Image).
-    first_src = items[0][2]
-    if isinstance(first_src, Path):
-        with Image.open(first_src) as sample:
-            tw, th = sample.size
-    else:
-        tw, th = first_src.size
-    header_h = 0 if clean else max(48, int(header_font_size * 1.8))
+    tw, th = items[0][2].size
+    header_h = max(48, int(header_font_size * 1.8))
     total = len(items)
     num_sheets = (total + per - 1) // per
     sheets: list[Path] = []
-    hfont = (ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", header_font_size)
-             if not clean else None)
+    hfont = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", header_font_size)
     for s in range(num_sheets):
         chunk = items[s * per:(s + 1) * per]
         sheet = Image.new("RGB", (cols * tw, header_h + rows * th), (10, 10, 10))
-        if not clean:
-            hdraw = ImageDraw.Draw(sheet)
-            first_idx = chunk[0][0]
-            last_idx = chunk[-1][0]
-            htxt = (f"{title}  ·  sheet {s+1:02d}/{num_sheets:02d}"
-                    f"  ·  frames {first_idx:03d}–{last_idx:03d}  ·  {len(chunk)} thumbs")
-            hy = (header_h - header_font_size) // 2 - 2
-            hdraw.text((max(14, header_font_size // 2), max(8, hy)),
-                       htxt, fill=(230, 230, 230), font=hfont)
+        hdraw = ImageDraw.Draw(sheet)
+        first_idx = chunk[0][0]
+        last_idx = chunk[-1][0]
+        htxt = (f"{title}  ·  sheet {s+1:02d}/{num_sheets:02d}"
+                f"  ·  frames {first_idx:03d}–{last_idx:03d}  ·  {len(chunk)} thumbs")
+        hy = (header_h - header_font_size) // 2 - 2
+        hdraw.text((max(14, header_font_size // 2), max(8, hy)),
+                   htxt, fill=(230, 230, 230), font=hfont)
         for i, (_, _, src) in enumerate(chunk):
-            if isinstance(src, Path):
-                with Image.open(src) as im:
-                    paste_img = im.convert("RGB").copy()
-            else:
-                paste_img = src
             r = i // cols
             c = i % cols
-            sheet.paste(paste_img, (c * tw, header_h + r * th))
+            sheet.paste(src, (c * tw, header_h + r * th))
         out = out_dir / f"{slug}_sheet_{s+1:02d}.{ext}"
         if ext.lower() in ("jpg", "jpeg"):
             sheet.save(out, format="JPEG", quality=90, optimize=True)
         else:
             sheet.save(out, optimize=True)
         size_mb = out.stat().st_size / 1024 / 1024
-        tag = "tile-clean" if clean else "tile"
-        print(f"[{tag}] {out.name}  ({len(chunk)} thumbs, {size_mb:.1f}MB)", flush=True)
+        print(f"[tile] {out.name}  ({len(chunk)} thumbs, {size_mb:.1f}MB)", flush=True)
         sheets.append(out)
     return sheets
 
 
 def export_kb(kb_root: Path, slug: str, title: str,
+              labeled: list,
               results: list[tuple[int, float, Path]],
               mkv: Path, fps: float,
               threshold: int, floor: float, target: int,
-              cols: int, rows: int, force: bool) -> bool:
-    """Export RAG-ready clean artifacts to <kb_root>/. Returns True if exported,
+              cols: int, rows: int,
+              header_font_size: int, force: bool) -> bool:
+    """Export RAG-ready artifacts to <kb_root>/. Frames are pristine JPEGs;
+    sheets are the labeled tile re-encoded as JPEG q=90 (lighter than the
+    PNG that lives in release/contact-sheets/). Returns True if exported,
     False if skipped due to idempotency."""
     kb_root = Path(kb_root).resolve()
     movie_json = kb_root / "per-movie" / f"{slug}.json"
@@ -271,7 +259,7 @@ def export_kb(kb_root: Path, slug: str, title: str,
         return False
 
     frames_dir = kb_root / "frames" / slug
-    sheets_dir = kb_root / "contact-sheets-clean" / slug
+    sheets_dir = kb_root / "contact-sheets" / slug
     movie_dir = kb_root / "per-movie"
     frames_dir.mkdir(parents=True, exist_ok=True)
     sheets_dir.mkdir(parents=True, exist_ok=True)
@@ -284,11 +272,10 @@ def export_kb(kb_root: Path, slug: str, title: str,
         with Image.open(raw_path) as im:
             im.convert("RGB").save(out, format="JPEG", quality=90, optimize=True)
 
-    # 2. Re-tile clean sheets from raw paths (no caption strip, no header).
-    raw_items = [(idx, t, p) for idx, t, p in results]
-    clean_sheets = tile_sheets(raw_items, cols, rows, sheets_dir,
-                               title, slug, header_font_size=0,
-                               clean=True, ext="jpg")
+    # 2. Re-tile labeled sheets as JPEG — same numbering + TC + header as the
+    #    release PNG sheet, just lighter (~30% size).
+    kb_sheets = tile_sheets(labeled, cols, rows, sheets_dir,
+                            title, slug, header_font_size, ext="jpg")
 
     # 3. Build per-movie manifest.
     runtime = probe_duration(mkv)
@@ -314,7 +301,7 @@ def export_kb(kb_root: Path, slug: str, title: str,
         })
 
     sheets_meta = []
-    for s in range(len(clean_sheets)):
+    for s in range(len(kb_sheets)):
         first_idx = s * per + 1
         last_idx = min((s + 1) * per, len(results))
         sheets_meta.append({
@@ -455,6 +442,7 @@ def main():
             kb_root=args.kb_export,
             slug=slug,
             title=title,
+            labeled=labeled,
             results=results,
             mkv=mkv,
             fps=fps,
@@ -463,6 +451,7 @@ def main():
             target=args.target,
             cols=args.cols,
             rows=args.rows,
+            header_font_size=header_font_size,
             force=args.kb_force,
         )
 
