@@ -134,7 +134,8 @@ def find_videos(release_dir: Path, downloads_root: Path) -> list[Path]:
     return out
 
 
-def run_contact_sheet(video: Path, out_dir: Path, title: str) -> tuple[int, str]:
+def run_contact_sheet(video: Path, out_dir: Path, title: str,
+                      kb_root: Path | None = None) -> tuple[int, str]:
     """Invoke contact_sheet.py in a new session; propagate SIGTERM/SIGINT
     to the subprocess tree via killpg. Returns (rc, stderr_tail)."""
     argv = [
@@ -147,9 +148,10 @@ def run_contact_sheet(video: Path, out_dir: Path, title: str) -> tuple[int, str]
         "--cols", "6", "--rows", "5",
         "--width", "640",
         "--workers", "6",
-        "--",
-        str(video),
     ]
+    if kb_root is not None:
+        argv.extend(["--kb-export", str(kb_root)])
+    argv.extend(["--", str(video)])
     proc = subprocess.Popen(
         argv,
         stdout=subprocess.PIPE,
@@ -180,7 +182,8 @@ def run_contact_sheet(video: Path, out_dir: Path, title: str) -> tuple[int, str]
 
 
 def sweep(downloads_root: Path, skip_patterns: list[str],
-          dry_run: bool, force: bool) -> dict:
+          dry_run: bool, force: bool,
+          kb_root: Path | None = None) -> dict:
     stats = {"done": 0, "skip": 0, "fail": 0}
     for entry in sorted(downloads_root.iterdir()):
         try:
@@ -233,7 +236,7 @@ def sweep(downloads_root: Path, skip_patterns: list[str],
                 continue
             log("start", f"{sanitize(entry.name)} {sanitize(video.name)}")
             t0 = time.time()
-            rc, err_tail = run_contact_sheet(video, out_dir, title)
+            rc, err_tail = run_contact_sheet(video, out_dir, title, kb_root=kb_root)
             dt = time.time() - t0
             if rc == 0:
                 log("done", f"{sanitize(entry.name)} {sanitize(video.name)} {dt:.0f}s")
@@ -259,6 +262,9 @@ def main() -> int:
                     help="Log what would run; don't invoke contact_sheet.py")
     ap.add_argument("--force", action="store_true",
                     help="Regenerate sheets for already-sheeted releases")
+    ap.add_argument("--kb", action=argparse.BooleanOptionalAction, default=True,
+                    help="Also export RAG-ready clean frames + manifests to "
+                         "<repo>/kb/ (default on; pass --no-kb to disable)")
     args = ap.parse_args()
 
     downloads_root = args.downloads.resolve() if args.downloads else read_downloads_root()
@@ -285,12 +291,14 @@ def main() -> int:
         lock_fd.close()
         return 0
 
+    kb_root = (REPO_ROOT / "kb").resolve() if args.kb else None
     try:
         log("start",
             f"downloads={sanitize(downloads_root)} dry_run={args.dry_run} "
-            f"force={args.force}")
+            f"force={args.force} kb={'on' if kb_root else 'off'}")
         t0 = time.time()
-        stats = sweep(downloads_root, args.skip, args.dry_run, args.force)
+        stats = sweep(downloads_root, args.skip, args.dry_run, args.force,
+                      kb_root=kb_root)
         dt = time.time() - t0
         summary = (f"done={stats['done']} skip={stats['skip']} "
                    f"fail={stats['fail']} duration={dt:.0f}s")
