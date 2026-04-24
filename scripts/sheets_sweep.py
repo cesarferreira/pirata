@@ -209,11 +209,13 @@ def sweep(downloads_root: Path, skip_patterns: list[str],
             stats["skip"] += 1
             continue
 
-        disk = shutil.disk_usage(downloads_root)
-        if disk.free / disk.total < DISK_FREE_FLOOR:
-            log("warn", f"{sanitize(entry.name)} (disk <10% free)")
-            stats["skip"] += 1
-            continue
+        # Dry-run doesn't write sheets, so disk gating is irrelevant.
+        if not dry_run:
+            disk = shutil.disk_usage(downloads_root)
+            if disk.free / disk.total < DISK_FREE_FLOOR:
+                log("warn", f"{sanitize(entry.name)} (disk <10% free)")
+                stats["skip"] += 1
+                continue
 
         out_dir = release / "contact-sheets"
         try:
