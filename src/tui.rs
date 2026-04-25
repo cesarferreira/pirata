@@ -408,12 +408,7 @@ where
                 .iter()
                 .map(|download| {
                     let line = Line::from(vec![
-                        download.status_badge(self.tick),
-                        Span::raw(" "),
-                        Span::styled(
-                            download.progress_summary(self.tick),
-                            Style::default().fg(Color::LightBlue),
-                        ),
+                        download.status_badge(),
                         Span::raw(" "),
                         Span::raw(download.torrent.name.clone()),
                     ]);
@@ -779,7 +774,7 @@ where
             Line::from(vec![
                 Span::styled("Progress ", Style::default().fg(Color::DarkGray)),
                 Span::styled(
-                    download.progress_summary(tick),
+                    download.progress_summary(),
                     Style::default()
                         .fg(Color::LightBlue)
                         .add_modifier(Modifier::BOLD),
@@ -1144,7 +1139,7 @@ impl DownloadSession {
         }
     }
 
-    fn progress_summary(&self, tick: usize) -> String {
+    fn progress_summary(&self) -> String {
         if let Some(progress) = self.progress {
             format!("{:>5.1}%", progress * 100.0)
         } else if matches!(self.tracking, DownloadTracking::Detached { .. }) {
@@ -1154,12 +1149,11 @@ impl DownloadSession {
         } else if self.is_finished() {
             "100.0%".to_string()
         } else {
-            let spinner = ["···", "•··", "••·", "•••"];
-            format!(" {} ", spinner[tick % spinner.len()])
+            "  0.0%".to_string()
         }
     }
 
-    fn status_badge(&self, tick: usize) -> Span<'static> {
+    fn status_badge(&self) -> Span<'static> {
         if matches!(self.tracking, DownloadTracking::Detached { .. }) {
             return Span::styled(" ext ", Style::default().fg(Color::Black).bg(Color::Blue));
         }
@@ -1178,17 +1172,10 @@ impl DownloadSession {
                 " stop ",
                 Style::default().fg(Color::Black).bg(Color::Yellow),
             ),
-            None => {
-                let spinner = match self.backend {
-                    SessionBackend::Transmission => ["cli", "run", "net", "io "],
-                    SessionBackend::Aria2 => ["a2 ", "meta", "peer", "dl "],
-                    SessionBackend::External => ["ext", "ext", "ext", "ext"],
-                };
-                Span::styled(
-                    format!(" {} ", spinner[tick % spinner.len()]),
-                    Style::default().fg(Color::Black).bg(Color::Cyan),
-                )
-            }
+            None => Span::styled(
+                self.progress_summary(),
+                Style::default().fg(Color::Black).bg(Color::Cyan),
+            ),
         }
     }
 
@@ -1615,9 +1602,15 @@ fn progress_bar(ratio: f64, width: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
+    use std::path::PathBuf;
+    use std::time::Instant;
+
+    use crate::model::Torrent;
+
     use super::{
-        calculate_size_ratio, parse_aria2_context, parse_aria2_progress_line,
-        parse_transmission_progress,
+        DownloadSession, DownloadTracking, SessionBackend, calculate_size_ratio,
+        parse_aria2_context, parse_aria2_progress_line, parse_transmission_progress,
     };
 
     #[test]
@@ -1648,5 +1641,50 @@ mod tests {
     #[test]
     fn calculates_aria2_size_ratio() {
         assert_eq!(calculate_size_ratio("512KiB", "1MiB"), Some(0.5));
+    }
+
+    #[test]
+    fn active_download_badge_uses_stable_percentage() {
+        let mut download = test_download_session(SessionBackend::Aria2);
+
+        assert_eq!(download.status_badge().content.as_ref(), "  0.0%");
+        assert_eq!(download.status_badge().content.as_ref(), "  0.0%");
+
+        download.progress = Some(0.425);
+
+        assert_eq!(download.status_badge().content.as_ref(), " 42.5%");
+        assert_eq!(download.status_badge().content.as_ref(), " 42.5%");
+    }
+
+    fn test_download_session(backend: SessionBackend) -> DownloadSession {
+        DownloadSession {
+            torrent: Torrent {
+                id: "1".to_string(),
+                name: "Example".to_string(),
+                info_hash: "abc123".to_string(),
+                magnet: None,
+                seeders: 1,
+                leechers: 0,
+                size_bytes: 1024,
+                status: None,
+                uploaded_by: None,
+                description: None,
+                category: None,
+                subcategory: None,
+                added: None,
+            },
+            target_path: PathBuf::from("/tmp/Example"),
+            backend,
+            tracking: DownloadTracking::Managed,
+            child: None,
+            receiver: None,
+            logs: VecDeque::new(),
+            progress: None,
+            status_text: "Fetching metadata...".to_string(),
+            context_text: None,
+            started_at: Instant::now(),
+            outcome: None,
+            history_synced: false,
+        }
     }
 }
