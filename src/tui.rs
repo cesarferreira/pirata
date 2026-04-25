@@ -434,7 +434,7 @@ where
         downloads_state.select((!self.downloads.is_empty()).then_some(self.selected_download));
         frame.render_stateful_widget(downloads, bottom[0], &mut downloads_state);
 
-        let download_detail_widget = Paragraph::new(self.download_details_lines(self.tick))
+        let download_detail_widget = Paragraph::new(self.download_details_lines())
             .block(Block::default().borders(Borders::ALL).title("Activity"))
             .wrap(Wrap { trim: true });
         frame.render_widget(download_detail_widget, bottom[1]);
@@ -750,7 +750,7 @@ where
         }
     }
 
-    fn download_details_lines(&self, tick: usize) -> Vec<Line<'static>> {
+    fn download_details_lines(&self) -> Vec<Line<'static>> {
         let Some(download) = self.downloads.get(self.selected_download) else {
             return vec![
                 Line::from("No downloads yet."),
@@ -780,7 +780,18 @@ where
                         .add_modifier(Modifier::BOLD),
                 ),
                 Span::raw("  "),
-                Span::raw(download.progress_label(tick)),
+                Span::styled(
+                    progress_bar(download.progress_ratio(), 24),
+                    Style::default().fg(
+                        if matches!(download.outcome, Some(DownloadOutcome::Success)) {
+                            Color::Green
+                        } else {
+                            Color::Cyan
+                        },
+                    ),
+                ),
+                Span::raw("  "),
+                Span::raw(download.progress_label()),
             ]),
             Line::from(vec![
                 Span::styled("Size ", Style::default().fg(Color::DarkGray)),
@@ -790,18 +801,7 @@ where
                 Span::raw(download.torrent.seeders.to_string()),
                 Span::raw("  "),
                 Span::styled("Elapsed ", Style::default().fg(Color::DarkGray)),
-                Span::raw(format!("{}s", download.started_at.elapsed().as_secs())),
-            ]),
-            Line::from(vec![
-                Span::styled("Gauge ", Style::default().fg(Color::DarkGray)),
-                Span::styled(
-                    progress_bar(download.progress_ratio(tick), 24),
-                    Style::default().fg(if download.is_finished() {
-                        Color::Green
-                    } else {
-                        Color::Cyan
-                    }),
-                ),
+                Span::raw(format_elapsed_duration(download.started_at.elapsed())),
             ]),
             Line::from(""),
             Line::from(Span::styled(
@@ -1103,40 +1103,18 @@ impl DownloadSession {
         }
     }
 
-    fn progress_ratio(&self, tick: usize) -> f64 {
+    fn progress_ratio(&self) -> f64 {
         if let Some(progress) = self.progress {
             progress
-        } else if matches!(self.tracking, DownloadTracking::Detached { .. }) {
-            0.18
-        } else if self.is_finished() {
+        } else if matches!(self.outcome, Some(DownloadOutcome::Success)) {
             1.0
         } else {
-            let phase = (tick % 20) as f64 / 20.0;
-            0.12 + if phase <= 0.5 {
-                phase * 0.36
-            } else {
-                (1.0 - phase) * 0.36
-            }
+            0.0
         }
     }
 
-    fn progress_label(&self, tick: usize) -> String {
-        if let Some(progress) = self.progress {
-            format!("{:.1}% | {}", progress * 100.0, self.status_text)
-        } else if matches!(self.tracking, DownloadTracking::Detached { .. }) {
-            self.status_text.clone()
-        } else if matches!(self.tracking, DownloadTracking::History) {
-            self.status_text.clone()
-        } else if self.is_finished() {
-            self.status_text.clone()
-        } else {
-            let spinner = ["|", "/", "-", "\\"];
-            format!(
-                "{} estimating | {}",
-                spinner[tick % spinner.len()],
-                self.status_text
-            )
-        }
+    fn progress_label(&self) -> String {
+        self.status_text.clone()
     }
 
     fn progress_summary(&self) -> String {
@@ -1146,7 +1124,7 @@ impl DownloadSession {
             " ext ".to_string()
         } else if matches!(self.tracking, DownloadTracking::History) {
             "hist ".to_string()
-        } else if self.is_finished() {
+        } else if matches!(self.outcome, Some(DownloadOutcome::Success)) {
             "100.0%".to_string()
         } else {
             "  0.0%".to_string()
@@ -1600,17 +1578,33 @@ fn progress_bar(ratio: f64, width: usize) -> String {
     format!("{}{}", "█".repeat(filled), "░".repeat(empty))
 }
 
+fn format_elapsed_duration(duration: Duration) -> String {
+    let total_secs = duration.as_secs();
+    let hours = total_secs / 3600;
+    let minutes = (total_secs % 3600) / 60;
+    let seconds = total_secs % 60;
+
+    if hours > 0 {
+        format!("{hours}h {minutes}m")
+    } else if minutes > 0 {
+        format!("{minutes}m {seconds}s")
+    } else {
+        format!("{seconds}s")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::VecDeque;
     use std::path::PathBuf;
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     use crate::model::Torrent;
 
     use super::{
         DownloadSession, DownloadTracking, SessionBackend, calculate_size_ratio,
-        parse_aria2_context, parse_aria2_progress_line, parse_transmission_progress,
+        format_elapsed_duration, parse_aria2_context, parse_aria2_progress_line,
+        parse_transmission_progress,
     };
 
     #[test]
@@ -1654,6 +1648,29 @@ mod tests {
 
         assert_eq!(download.status_badge().content.as_ref(), " 42.5%");
         assert_eq!(download.status_badge().content.as_ref(), " 42.5%");
+    }
+
+    #[test]
+    fn unknown_progress_is_stable_and_empty() {
+        let download = test_download_session(SessionBackend::Aria2);
+
+        assert_eq!(download.progress_ratio(), 0.0);
+        assert_eq!(download.progress_ratio(), 0.0);
+    }
+
+    #[test]
+    fn unknown_progress_label_uses_status_without_spinner() {
+        let download = test_download_session(SessionBackend::Aria2);
+
+        assert_eq!(download.progress_label(), "Fetching metadata...");
+        assert_eq!(download.progress_label(), "Fetching metadata...");
+    }
+
+    #[test]
+    fn formats_elapsed_time_for_activity_pane() {
+        assert_eq!(format_elapsed_duration(Duration::from_secs(45)), "45s");
+        assert_eq!(format_elapsed_duration(Duration::from_secs(125)), "2m 5s");
+        assert_eq!(format_elapsed_duration(Duration::from_secs(3_900)), "1h 5m");
     }
 
     fn test_download_session(backend: SessionBackend) -> DownloadSession {
