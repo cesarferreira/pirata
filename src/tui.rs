@@ -26,8 +26,8 @@ use crate::state::{DetachedDownloadRecord, load_recent_detached_downloads};
 use crate::util::{ensure_aria2_available, ensure_transmission_cli_available, format_size};
 
 const MAX_LOG_LINES: usize = 14;
-const TICK_RATE: Duration = Duration::from_millis(33);
-const DETACHED_REFRESH_TICKS: usize = 30;
+const TICK_RATE: Duration = Duration::from_millis(250);
+const DETACHED_REFRESH_TICKS: usize = 4;
 
 pub fn run_search_tui<F>(
     initial_query: Option<String>,
@@ -1246,21 +1246,7 @@ fn spawn_aria2_cli(
 ) -> Result<(Child, Receiver<DownloadEvent>)> {
     ensure_aria2_available()?;
 
-    let mut command = Command::new("aria2c");
-    command.stdin(Stdio::null());
-    command.stdout(Stdio::piped());
-    command.stderr(Stdio::piped());
-    command.arg("--seed-time=0");
-    command.arg("--summary-interval=1");
-    command.arg("--show-console-readout=true");
-    command.arg("--truncate-console-readout=false");
-    command.arg("--download-result=hide");
-    command.arg("--enable-color=false");
-    command.arg("--console-log-level=error");
-    if let Some(download_dir) = &config.download_dir {
-        command.arg("--dir").arg(download_dir);
-    }
-    command.arg(torrent.resolved_magnet());
+    let mut command = build_aria2_tui_command(torrent, config);
 
     let mut child = command.spawn().context("failed to start aria2c")?;
     let stdout = child
@@ -1279,6 +1265,39 @@ fn spawn_aria2_cli(
     Ok((child, receiver))
 }
 
+fn build_aria2_tui_command(torrent: &Torrent, config: &Aria2Config) -> Command {
+    let mut command = new_aria2_tui_command();
+    command.stdin(Stdio::null());
+    command.stdout(Stdio::piped());
+    command.stderr(Stdio::piped());
+    command.arg("--seed-time=0");
+    command.arg("--summary-interval=5");
+    command.arg("--show-console-readout=true");
+    command.arg("--truncate-console-readout=false");
+    command.arg("--download-result=hide");
+    command.arg("--enable-color=false");
+    command.arg("--console-log-level=error");
+    command.arg("--bt-max-peers=30");
+    command.arg("--file-allocation=none");
+    if let Some(download_dir) = &config.download_dir {
+        command.arg("--dir").arg(download_dir);
+    }
+    command.arg(torrent.resolved_magnet());
+    command
+}
+
+#[cfg(unix)]
+fn new_aria2_tui_command() -> Command {
+    let mut command = Command::new("nice");
+    command.arg("-n").arg("10").arg("aria2c");
+    command
+}
+
+#[cfg(not(unix))]
+fn new_aria2_tui_command() -> Command {
+    Command::new("aria2c")
+}
+
 fn spawn_reader<R>(stream: R, sender: Sender<DownloadEvent>, prefix: &'static str)
 where
     R: Read + Send + 'static,
@@ -1286,21 +1305,19 @@ where
     thread::spawn(move || {
         let mut reader = BufReader::new(stream);
         let mut buffer = Vec::new();
-        let mut byte = [0_u8; 1];
+        let mut chunk = [0_u8; 8192];
 
         loop {
-            match reader.read(&mut byte) {
+            match reader.read(&mut chunk) {
                 Ok(0) => {
                     emit_buffer(&buffer, &sender, prefix);
                     break;
                 }
-                Ok(_) => match byte[0] {
-                    b'\n' | b'\r' => {
-                        emit_buffer(&buffer, &sender, prefix);
-                        buffer.clear();
+                Ok(bytes_read) => {
+                    for line in drain_output_chunk(&mut buffer, &chunk[..bytes_read], prefix) {
+                        let _ = sender.send(DownloadEvent::Output(line));
                     }
-                    value => buffer.push(value),
-                },
+                }
                 Err(error) => {
                     let _ = sender.send(DownloadEvent::ReadError(format!(
                         "{prefix}failed to read downloader output: {error}"
@@ -1312,18 +1329,39 @@ where
     });
 }
 
-fn emit_buffer(buffer: &[u8], sender: &Sender<DownloadEvent>, prefix: &str) {
-    if buffer.is_empty() {
-        return;
+fn drain_output_chunk(buffer: &mut Vec<u8>, chunk: &[u8], prefix: &str) -> Vec<String> {
+    let mut lines = Vec::new();
+    for &byte in chunk {
+        match byte {
+            b'\n' | b'\r' => {
+                if let Some(line) = format_output_buffer(buffer, prefix) {
+                    lines.push(line);
+                }
+                buffer.clear();
+            }
+            value => buffer.push(value),
+        }
     }
+    lines
+}
 
+fn emit_buffer(buffer: &[u8], sender: &Sender<DownloadEvent>, prefix: &str) {
+    if let Some(line) = format_output_buffer(buffer, prefix) {
+        let _ = sender.send(DownloadEvent::Output(line));
+    }
+}
+
+fn format_output_buffer(buffer: &[u8], prefix: &str) -> Option<String> {
+    if buffer.is_empty() {
+        return None;
+    }
     let text = String::from_utf8_lossy(buffer);
     let trimmed = text.trim();
     if trimmed.is_empty() {
-        return;
+        return None;
     }
 
-    let _ = sender.send(DownloadEvent::Output(format!("{prefix}{trimmed}")));
+    Some(format!("{prefix}{trimmed}"))
 }
 
 fn parse_transmission_progress(line: &str) -> Option<f64> {
@@ -1599,12 +1637,13 @@ mod tests {
     use std::path::PathBuf;
     use std::time::{Duration, Instant};
 
+    use crate::config::Aria2Config;
     use crate::model::Torrent;
 
     use super::{
-        DownloadSession, DownloadTracking, SessionBackend, calculate_size_ratio,
-        format_elapsed_duration, parse_aria2_context, parse_aria2_progress_line,
-        parse_transmission_progress,
+        DownloadSession, DownloadTracking, SessionBackend, TICK_RATE, build_aria2_tui_command,
+        calculate_size_ratio, drain_output_chunk, format_elapsed_duration, parse_aria2_context,
+        parse_aria2_progress_line, parse_transmission_progress,
     };
 
     #[test]
@@ -1673,23 +1712,44 @@ mod tests {
         assert_eq!(format_elapsed_duration(Duration::from_secs(3_900)), "1h 5m");
     }
 
+    #[test]
+    fn tui_tick_rate_is_throttled_to_avoid_busy_redraws() {
+        assert!(TICK_RATE >= Duration::from_millis(200));
+    }
+
+    #[test]
+    fn tui_aria2_command_uses_resource_friendly_progress_output() {
+        let torrent = test_torrent("Example");
+        let command = build_aria2_tui_command(&torrent, &Aria2Config { download_dir: None });
+        let args: Vec<String> = command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().into_owned())
+            .collect();
+
+        assert!(args.iter().any(|arg| arg == "--summary-interval=5"));
+        assert!(args.iter().any(|arg| arg == "--bt-max-peers=30"));
+        assert!(args.iter().any(|arg| arg == "--file-allocation=none"));
+    }
+
+    #[test]
+    fn output_chunks_are_split_on_carriage_returns_and_newlines() {
+        let mut buffer = Vec::new();
+
+        assert_eq!(
+            drain_output_chunk(&mut buffer, b"first\rsecond\npart", ""),
+            vec!["first".to_string(), "second".to_string()]
+        );
+        assert_eq!(buffer, b"part");
+        assert_eq!(
+            drain_output_chunk(&mut buffer, b"ial\r", "stderr | "),
+            vec!["stderr | partial".to_string()]
+        );
+        assert!(buffer.is_empty());
+    }
+
     fn test_download_session(backend: SessionBackend) -> DownloadSession {
         DownloadSession {
-            torrent: Torrent {
-                id: "1".to_string(),
-                name: "Example".to_string(),
-                info_hash: "abc123".to_string(),
-                magnet: None,
-                seeders: 1,
-                leechers: 0,
-                size_bytes: 1024,
-                status: None,
-                uploaded_by: None,
-                description: None,
-                category: None,
-                subcategory: None,
-                added: None,
-            },
+            torrent: test_torrent("Example"),
             target_path: PathBuf::from("/tmp/Example"),
             backend,
             tracking: DownloadTracking::Managed,
@@ -1702,6 +1762,24 @@ mod tests {
             started_at: Instant::now(),
             outcome: None,
             history_synced: false,
+        }
+    }
+
+    fn test_torrent(name: &str) -> Torrent {
+        Torrent {
+            id: "1".to_string(),
+            name: name.to_string(),
+            info_hash: format!("abc123{name}"),
+            magnet: None,
+            seeders: 1,
+            leechers: 0,
+            size_bytes: 1024,
+            status: None,
+            uploaded_by: None,
+            description: None,
+            category: None,
+            subcategory: None,
+            added: None,
         }
     }
 }

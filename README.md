@@ -59,7 +59,7 @@ pirata tui ubuntu
 pirata tui "ubuntu 24.04" --sort seeders
 ```
 
-Downloads started inside the TUI show live progress. Completed downloads are persisted locally and reloaded on the next launch as long as their file or folder still exists on disk.
+Downloads started inside the TUI show live progress and can run in parallel. Completed downloads are persisted locally and reloaded on the next launch as long as their file or folder still exists on disk.
 
 Keys:
 
