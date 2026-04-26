@@ -142,6 +142,20 @@ python3 "$SWEEP" --downloads "$DOWNLOADS" --dry-run --ignore-disk-floor 2>/dev/n
 assert "T10 --ignore-disk-floor recorded on start log line" \
   grep -q "sweep start.*ignore_disk_floor=True" "$LOG"
 
+# Test 11: --kb-imdb default is on, surfaced in the start log line
+echo
+echo "=== sweep --dry-run (default --kb-imdb on) ==="
+python3 "$SWEEP" --downloads "$DOWNLOADS" --dry-run 2>/dev/null
+assert "T11 default kb_imdb=on recorded on start log line" \
+  grep -q "sweep start.*kb_imdb=on" "$LOG"
+
+# Test 12: --no-kb-imdb opts out, surfaced in the start log line
+echo
+echo "=== sweep --dry-run --no-kb-imdb ==="
+python3 "$SWEEP" --downloads "$DOWNLOADS" --dry-run --no-kb-imdb 2>/dev/null
+assert "T12 kb_imdb=off recorded when --no-kb-imdb passed" \
+  grep -q "sweep start.*kb_imdb=off" "$LOG"
+
 # Test 4: concurrent sweep — hold the flock explicitly via a background
 # Python helper; then invoke sweep and expect "already running" output.
 # Dry-run is too fast to race without an explicit holder.

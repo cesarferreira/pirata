@@ -135,7 +135,8 @@ def find_videos(release_dir: Path, downloads_root: Path) -> list[Path]:
 
 
 def run_contact_sheet(video: Path, out_dir: Path, title: str,
-                      kb_root: Path | None = None) -> tuple[int, str]:
+                      kb_root: Path | None = None,
+                      kb_imdb: bool = True) -> tuple[int, str]:
     """Invoke contact_sheet.py in a new session; propagate SIGTERM/SIGINT
     to the subprocess tree via killpg. Returns (rc, stderr_tail)."""
     argv = [
@@ -151,6 +152,8 @@ def run_contact_sheet(video: Path, out_dir: Path, title: str,
     ]
     if kb_root is not None:
         argv.extend(["--kb-export", str(kb_root)])
+    if not kb_imdb:
+        argv.append("--no-kb-imdb")
     argv.extend(["--", str(video)])
     proc = subprocess.Popen(
         argv,
@@ -184,7 +187,8 @@ def run_contact_sheet(video: Path, out_dir: Path, title: str,
 def sweep(downloads_root: Path, skip_patterns: list[str],
           dry_run: bool, force: bool,
           kb_root: Path | None = None,
-          ignore_disk_floor: bool = False) -> dict:
+          ignore_disk_floor: bool = False,
+          kb_imdb: bool = True) -> dict:
     stats = {"done": 0, "skip": 0, "fail": 0}
     for entry in sorted(downloads_root.iterdir()):
         try:
@@ -237,7 +241,8 @@ def sweep(downloads_root: Path, skip_patterns: list[str],
                 continue
             log("start", f"{sanitize(entry.name)} {sanitize(video.name)}")
             t0 = time.time()
-            rc, err_tail = run_contact_sheet(video, out_dir, title, kb_root=kb_root)
+            rc, err_tail = run_contact_sheet(video, out_dir, title,
+                                             kb_root=kb_root, kb_imdb=kb_imdb)
             dt = time.time() - t0
             if rc == 0:
                 log("done", f"{sanitize(entry.name)} {sanitize(video.name)} {dt:.0f}s")
@@ -266,6 +271,9 @@ def main() -> int:
     ap.add_argument("--kb", action=argparse.BooleanOptionalAction, default=True,
                     help="Also export RAG-ready clean frames + manifests to "
                          "<repo>/kb/ (default on; pass --no-kb to disable)")
+    ap.add_argument("--kb-imdb", action=argparse.BooleanOptionalAction, default=True,
+                    help="Pass through to contact_sheet.py: resolve metadata via "
+                         "IMDb local catalog (default on; pass --no-kb-imdb to skip)")
     ap.add_argument("--ignore-disk-floor", action="store_true",
                     help="Override the 10%% free-disk safety gate. Use only when "
                          "you know sheet output (~tens of MB) won't OOM the disk.")
@@ -298,14 +306,16 @@ def main() -> int:
     kb_root = (REPO_ROOT / "kb").resolve() if args.kb else None
     try:
         start_detail = (f"downloads={sanitize(downloads_root)} dry_run={args.dry_run} "
-                        f"force={args.force} kb={'on' if kb_root else 'off'}")
+                        f"force={args.force} kb={'on' if kb_root else 'off'} "
+                        f"kb_imdb={'on' if args.kb_imdb else 'off'}")
         if args.ignore_disk_floor:
             start_detail += " ignore_disk_floor=True"
         log("start", start_detail)
         t0 = time.time()
         stats = sweep(downloads_root, args.skip, args.dry_run, args.force,
                       kb_root=kb_root,
-                      ignore_disk_floor=args.ignore_disk_floor)
+                      ignore_disk_floor=args.ignore_disk_floor,
+                      kb_imdb=args.kb_imdb)
         dt = time.time() - t0
         summary = (f"done={stats['done']} skip={stats['skip']} "
                    f"fail={stats['fail']} duration={dt:.0f}s")
