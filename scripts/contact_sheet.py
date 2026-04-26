@@ -297,6 +297,14 @@ def export_kb(kb_root: Path, slug: str, title: str,
     imdb_block = None
     if kb_imdb:
         try:
+            # scripts/ was stripped from sys.path at module load (lines 18-22)
+            # to keep stdlib `queue` from being shadowed by scripts/queue.py
+            # at import time. By the time export_kb runs, concurrent.futures
+            # / multiprocessing have already cached stdlib queue, so we can
+            # safely re-add scripts/ here for the sibling import.
+            scripts_dir = os.path.dirname(os.path.abspath(__file__))
+            if scripts_dir not in sys.path:
+                sys.path.insert(0, scripts_dir)
             from imdb_kb_enrich import resolve as imdb_resolve
             res = imdb_resolve(title, slug=slug)
             manifest_title = res.canonical_title
