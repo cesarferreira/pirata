@@ -1,0 +1,124 @@
+{
+  "run_id": "20260425-161240-91250afb",
+  "mode": "autofix",
+  "scope": {
+    "branch": "main",
+    "head_sha": "fb4b4a4553fe4a79498305f7227f211e2ee22df3",
+    "review_target": "LFG step-3 implementation work for plan docs/plans/2026-04-25-005-feat-kh-export-surface-plan.md",
+    "files_in_scope": [
+      "scripts/build_kh_export.py",
+      "scripts/tests/test_kh_export.sh",
+      "docs/prompts/2026-04-25-kh-ingest-FIRE-v2.md"
+    ],
+    "files_out_of_scope_carryover": [
+      "scripts/imdb_lookup.py",
+      "scripts/tests/test_imdb_lookup.sh",
+      "scripts/tests/fixtures/imdb_pt_br_20.txt",
+      "docs/prompts/2026-04-25-kh-ingest-v2.md",
+      "docs/prompts/2026-04-25-kh-ingest-v2-eng.md",
+      "docs/prompts/2026-04-25-kh-ingest-v2-eng-codex.md",
+      "docs/prompts/2026-04-25-kh-ingest-FIRE.md",
+      "scripts/imdb_ingest.py (modified, raise pre-flight 25->35 GB)",
+      "docs/plans/2026-04-24-004-feat-imdb-local-pirata-coupling-plan.md (modified, Phase 0 actuals)"
+    ],
+    "generated_artifacts_excluded": [
+      "kb/kh-export/04-derived/* (derived from build_kh_export.py)"
+    ]
+  },
+  "intent": "Add an additive kh-compatible export surface inside pirata workspace so the second kh ingest attempt does not lose manifest content to the .jsonl suffix filter. Three deliverables: idempotent builder script, hermetic smoke test, refreshed paste-now Codex prompt.",
+  "reviewers_run": [
+    "correctness (always-on, consolidated)",
+    "testing (always-on, consolidated)",
+    "maintainability (always-on, consolidated)",
+    "project-standards (always-on, consolidated)",
+    "kieran-python (Python diff)",
+    "reliability (atomic FS swap)",
+    "ce-learnings-researcher (always-on, consolidated)",
+    "ce-agent-native-reviewer (always-on, consolidated)"
+  ],
+  "reviewers_skipped": {
+    "security": "no auth, no user input, no public endpoints, no permissions",
+    "performance": "no DB queries, no async, simple file I/O on small files (1 movie, 300 manifest rows)",
+    "api-contract": "no API surface; CLI args are local-only and stable",
+    "data-migrations": "no DB migrations",
+    "adversarial": "diff <50 lines of executable code path; no auth/payments/data-mutation surface that warrants stress-test persona",
+    "previous-comments": "no PR; standalone branch review",
+    "cli-readiness": "CLI is internal, 2 args, low-risk; stack-specific persona not warranted"
+  },
+  "findings": [],
+  "pre_existing_findings": [],
+  "advisory_findings": [
+    {
+      "title": "Source per-movie JSON read uses default encoding",
+      "severity": "P3",
+      "file": "scripts/build_kh_export.py",
+      "line": 71,
+      "confidence": 0.7,
+      "autofix_class": "advisory",
+      "owner": "human",
+      "requires_verification": false,
+      "pre_existing": false,
+      "why_it_matters": "build_movie_md calls json_path.read_text() without encoding='utf-8'. Python 3 defaults to locale-driven encoding, which is utf-8 on macOS but cp1252 on Windows. The project is a personal Mac workspace ('Personal Mac-based media workspace' per CLAUDE.md), so this is a non-issue today. Flagged for future portability if pirata ever runs on a non-macOS host.",
+      "suggested_fix": "Add encoding='utf-8' to json_path.read_text() in build_movie_md for symmetry with build_manifest_json which already uses encoding='utf-8'."
+    },
+    {
+      "title": "No test for missing-kb error path (exit 1)",
+      "severity": "P3",
+      "file": "scripts/tests/test_kh_export.sh",
+      "line": 0,
+      "confidence": 0.6,
+      "autofix_class": "advisory",
+      "owner": "human",
+      "requires_verification": false,
+      "pre_existing": false,
+      "why_it_matters": "The build script returns exit 1 when kb/ does not exist. The smoke test never exercises this branch. Low-impact because the live pirata workspace always has kb/, but coverage gap is real.",
+      "suggested_fix": "Add a 23rd assertion that runs python3 scripts/build_kh_export.py --kb /tmp/nonexistent-kb-XXXX and asserts exit code is 1."
+    },
+    {
+      "title": "Test tree checksum uses xargs without -0 (filename edge cases)",
+      "severity": "P3",
+      "file": "scripts/tests/test_kh_export.sh",
+      "line": 88,
+      "confidence": 0.5,
+      "autofix_class": "advisory",
+      "owner": "human",
+      "requires_verification": false,
+      "pre_existing": false,
+      "why_it_matters": "find ... | sort | xargs shasum breaks on filenames with spaces, newlines, or special chars. Pirata's kebab-case slug convention guarantees no spaces today, so this is theoretical for this project. Documented anti-pattern but project-correct.",
+      "suggested_fix": "Use find ... -print0 | sort -z | xargs -0 shasum if multi-platform safety is wanted. Skip otherwise."
+    }
+  ],
+  "requirements_check": {
+    "plan_source": "explicit",
+    "plan_path": "docs/plans/2026-04-25-005-feat-kh-export-surface-plan.md",
+    "results": {
+      "R1": {"status": "met", "evidence": "test assertion 04 + 08 (per-movie JSON exported, byte-identical to source)"},
+      "R2": {"status": "met", "evidence": "test assertion 05 + 10a-10d (MD wrapper exists, contains all 4 literal strings)"},
+      "R3": {"status": "met", "evidence": "test assertion 11 (manifest.json schema verified, row_count=300 matches source)"},
+      "R4": {"status": "met", "evidence": "test assertion 07 + 12 (README.md exists and non-empty)"},
+      "R5": {"status": "met", "evidence": "scripts/build_kh_export.py exists, test assertion 17 verifies idempotency via tree-checksum match across runs"},
+      "R6": {"status": "met", "evidence": "scripts/tests/test_kh_export.sh exists with 22 assertion labels (25 distinct PASS lines), all PASS"},
+      "R7": {"status": "met", "evidence": "docs/prompts/2026-04-25-kh-ingest-FIRE-v2.md exists, staging commands cite kb/kh-export/04-derived/ (9 occurrences), validation-result decision is GO-WITH-CAVEATS"},
+      "R8": {"status": "met", "evidence": "test assertion 13 (no JPGs in kb/kh-export/)"},
+      "R9": {"status": "met", "evidence": "test assertion 14 (kb/manifest.jsonl SHA unchanged before/after); manual verification: no writes detected under /Users/vidigal/knowledge-base/"}
+    },
+    "summary": "9 of 9 plan requirements have implementation evidence verified by the smoke test."
+  },
+  "coverage": {
+    "tests_run": "25/25 PASS in scripts/tests/test_kh_export.sh",
+    "suppressed_findings": 0,
+    "p0_p1_findings": 0,
+    "p2_findings": 0,
+    "p3_advisory": 3,
+    "untracked_files_excluded": [],
+    "failed_reviewers": [],
+    "patterns_followed": [
+      "scripts/contact_sheet.py:21-22 sys.path guard (verified)",
+      "scripts/contact_sheet.py:327-330 atomic write idiom (adapted to dir-level via tmp+os.replace; verified)",
+      "scripts/imdb_ingest.py exit-code convention 0/1/2/3 (verified in main() try/except)",
+      "scripts/sheets_sweep.py:52-58 now_iso() + log() helpers (verified)",
+      "scripts/tests/test_imdb_ingest.sh structure (PASS/FAIL counters, set -uo pipefail without -e, sectional run blocks; verified)"
+    ]
+  },
+  "verdict": "Ready to merge. 0 P0/P1/P2 findings. 3 P3 advisory items below the autofix threshold (per caller instruction 'Skip P2/P3 cosmetic'). 9/9 plan requirements verified by 25-assertion smoke test. All 5 cited project patterns are mirrored in the implementation."
+}
