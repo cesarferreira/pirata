@@ -158,12 +158,16 @@ def build_manifest_json(groups: dict[str, dict],
         if json_path and json_path.is_file():
             try:
                 jd = json.loads(json_path.read_text(encoding="utf-8"))
-                j_title = jd.get("title")
-                j_year = jd.get("year")
-                if j_title and j_title != slug:
-                    title = j_title
-                if j_year is not None:
-                    year = j_year
+                if isinstance(jd, dict):
+                    j_title = jd.get("title")
+                    j_year = jd.get("year")
+                    if j_title and j_title != slug:
+                        title = j_title
+                    if j_year is not None:
+                        year = j_year
+                else:
+                    log("warn", f"per-movie JSON unreadable for {slug}; "
+                                f"manifest.json header falls back to manifest-derived title/year")
             except (json.JSONDecodeError, OSError, UnicodeDecodeError):
                 # Keep manifest-derived values on parse/IO/encoding failure
                 # (symmetric with build_slug_md). UnicodeDecodeError fires
@@ -211,14 +215,22 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
     json_data: dict[str, Any] = {}
     if has_json:
         try:
-            json_data = json.loads(per_movie_json.read_text(encoding="utf-8"))
+            loaded_json = json.loads(per_movie_json.read_text(encoding="utf-8"))
+            if isinstance(loaded_json, dict):
+                json_data = loaded_json
+            else:
+                has_json = False
+                json_data = {}
+                log("warn", f"per-movie JSON unreadable for {slug}; "
+                            f"falling back to bare-wrapper rendering")
             # Overlay title/year if the per-movie JSON has stronger values.
-            j_title = json_data.get("title")
-            j_year = json_data.get("year")
-            if j_title and j_title != slug:
-                title = j_title
-            if j_year is not None:
-                year = j_year
+            if has_json:
+                j_title = json_data.get("title")
+                j_year = json_data.get("year")
+                if j_title and j_title != slug:
+                    title = j_title
+                if j_year is not None:
+                    year = j_year
         except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             # Symmetric with build_manifest_json: corrupt/unreadable per-movie
             # JSON degrades to bare-wrapper rendering instead of crashing the
@@ -511,8 +523,25 @@ def build(kb: Path, out: Path) -> int:
     if per_movie_in.exists():
         for json_file in sorted(per_movie_in.glob("*.json")):
             slug = json_file.stem
-            per_movie_paths[slug] = json_file
-            shutil.copy2(json_file, per_movie_out / f"{slug}.json")
+            if not json_file.is_file():
+                log("warn", f"per-movie JSON path is not a regular file for {slug}; "
+                            f"skipping copy")
+                continue
+            copied_json = per_movie_out / f"{slug}.json"
+            try:
+                shutil.copy2(json_file, copied_json)
+            except OSError as exc:
+                if copied_json.exists() or copied_json.is_symlink():
+                    try:
+                        copied_json.unlink()
+                    except OSError:
+                        log("error", f"partial per-movie JSON cleanup failed for {slug}: "
+                                     f"{copied_json}")
+                        raise
+                log("warn", f"per-movie JSON unreadable for {slug}; "
+                            f"skipping copy ({exc.__class__.__name__})")
+                continue
+            per_movie_paths[slug] = copied_json
         log("info", f"copied {len(per_movie_paths)} per-movie JSON file(s)")
     else:
         log("warn", f"no per-movie/ dir at {per_movie_in}")

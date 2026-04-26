@@ -629,6 +629,188 @@ else
   fail "35.non-UTF-8 bytes: no warn breadcrumb (encoding error escaped except)"
 fi
 
+# 36-42 — Valid JSON can still be the wrong root shape. A numeric or list
+# JSON root parses successfully, but overlay code expects an object. These
+# fixtures prove non-object roots take the same graceful fallback path as
+# corrupt JSON instead of crashing on .get(...).
+KB8=$(mktemp -d -t khexport-kb8.XXXXXX)
+trap "rm -rf $SYN_TMP $KB6 $KB7 $KB8" EXIT
+mkdir -p "$KB8/per-movie"
+cat > "$KB8/manifest.jsonl" <<'EOF'
+{"slug":"test-nondict-num","idx":1,"tc":"00:00:01:00","t_s":1.0}
+{"slug":"test-nondict-list","idx":1,"tc":"00:00:02:00","t_s":2.0}
+EOF
+echo '123' > "$KB8/per-movie/test-nondict-num.json"
+echo '[]' > "$KB8/per-movie/test-nondict-list.json"
+OUT8="$KB8/out"
+RUN8_LOG=$(python3 "$SCRIPT" --kb "$KB8" --out "$OUT8" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ]; then pass "36.non-object JSON: builder exits 0 (graceful)"; else fail "36.non-object JSON: builder exit was $rc (log: $RUN8_LOG)"; fi
+if printf '%s' "$RUN8_LOG" | grep -qF 'per-movie JSON unreadable for test-nondict-num; manifest.json header falls back to manifest-derived title/year'; then
+  pass "37a.non-object JSON: build_manifest_json warn breadcrumb emitted"
+else
+  fail "37a.non-object JSON: missing build_manifest_json warn breadcrumb"
+fi
+if printf '%s' "$RUN8_LOG" | grep -qF 'per-movie JSON unreadable for test-nondict-num; falling back to bare-wrapper rendering'; then
+  pass "37b.non-object JSON: build_slug_md warn breadcrumb emitted"
+else
+  fail "37b.non-object JSON: missing build_slug_md warn breadcrumb"
+fi
+if printf '%s' "$RUN8_LOG" | grep -qF 'per-movie JSON unreadable for test-nondict-list'; then
+  pass "38.non-object JSON: list-root warn breadcrumb emitted"
+else
+  fail "38.non-object JSON: missing list-root warn breadcrumb"
+fi
+if python3 -c "
+import json, sys
+m = json.load(open(sys.argv[1]))
+num = m['slugs']['test-nondict-num']
+lst = m['slugs']['test-nondict-list']
+assert num['title'] == 'test-nondict-num', f'num title: {num[\"title\"]!r}'
+assert num['year'] is None, f'num year: {num[\"year\"]!r}'
+assert lst['title'] == 'test-nondict-list', f'list title: {lst[\"title\"]!r}'
+assert lst['year'] is None, f'list year: {lst[\"year\"]!r}'
+" "$OUT8/04-derived/manifest.json"; then
+  pass "39.non-object JSON: manifest.json header falls back for both roots"
+else
+  fail "39.non-object JSON: manifest.json fallback broken"
+fi
+if [ -f "$OUT8/04-derived/per-movie/test-nondict-num.md" ] && [ -f "$OUT8/04-derived/per-movie/test-nondict-list.md" ]; then
+  pass "40.non-object JSON: bare wrappers still produced"
+else
+  fail "40.non-object JSON: wrapper missing"
+fi
+NUM_MD=$(cat "$OUT8/04-derived/per-movie/test-nondict-num.md")
+LIST_MD=$(cat "$OUT8/04-derived/per-movie/test-nondict-list.md")
+expect_in     "41a.non-object JSON: numeric root has_json false"       "has_per_movie_json: false" "$NUM_MD"
+expect_not_in "41b.non-object JSON: numeric root no JSON-only fps"      "fps:" "$NUM_MD"
+expect_not_in "41c.non-object JSON: numeric root no JSON-only runtime"  "runtime_s:" "$NUM_MD"
+expect_in     "41d.non-object JSON: numeric root caveat emitted"        'No per-movie JSON exists at `kb/per-movie/test-nondict-num.json`.' "$NUM_MD"
+expect_not_in "41e.non-object JSON: numeric root no IMDb section"       "## IMDb metadata" "$NUM_MD"
+expect_in     "42a.non-object JSON: list root has_json false"           "has_per_movie_json: false" "$LIST_MD"
+expect_not_in "42b.non-object JSON: list root no JSON-only fps"         "fps:" "$LIST_MD"
+expect_not_in "42c.non-object JSON: list root no JSON-only runtime"     "runtime_s:" "$LIST_MD"
+expect_in     "42d.non-object JSON: list root caveat emitted"           'No per-movie JSON exists at `kb/per-movie/test-nondict-list.json`.' "$LIST_MD"
+expect_not_in "42e.non-object JSON: list root no IMDb section"          "## IMDb metadata" "$LIST_MD"
+
+# 43-49 — The builder copies kb/per-movie/*.json before wrapper/manifest
+# fallback code runs. Non-regular paths must be skipped before copy2 so a
+# directory or broken symlink with a .json suffix cannot abort the export.
+KB9=$(mktemp -d -t khexport-kb9.XXXXXX)
+trap "rm -rf $SYN_TMP $KB6 $KB7 $KB8 $KB9" EXIT
+mkdir -p "$KB9/per-movie"
+cat > "$KB9/manifest.jsonl" <<'EOF'
+{"slug":"test-dir","idx":1,"tc":"00:00:01:00","t_s":1.0}
+{"slug":"test-broken","idx":1,"tc":"00:00:02:00","t_s":2.0}
+EOF
+mkdir "$KB9/per-movie/test-dir.json"
+ln -s "$KB9/per-movie/missing-target.json" "$KB9/per-movie/test-broken.json"
+OUT9="$KB9/out"
+RUN9_LOG=$(python3 "$SCRIPT" --kb "$KB9" --out "$OUT9" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ]; then pass "43.non-regular JSON paths: builder exits 0 (graceful)"; else fail "43.non-regular JSON paths: builder exit was $rc (log: $RUN9_LOG)"; fi
+if printf '%s' "$RUN9_LOG" | grep -qF 'per-movie JSON path is not a regular file for test-dir'; then
+  pass "44.non-regular JSON paths: directory warn breadcrumb emitted"
+else
+  fail "44.non-regular JSON paths: missing directory warn breadcrumb"
+fi
+if printf '%s' "$RUN9_LOG" | grep -qF 'per-movie JSON path is not a regular file for test-broken'; then
+  pass "45.non-regular JSON paths: broken symlink warn breadcrumb emitted"
+else
+  fail "45.non-regular JSON paths: missing broken symlink warn breadcrumb"
+fi
+if [ -f "$OUT9/04-derived/per-movie/test-dir.md" ] && [ -f "$OUT9/04-derived/per-movie/test-broken.md" ]; then
+  pass "46.non-regular JSON paths: manifest-only wrappers still produced"
+else
+  fail "46.non-regular JSON paths: wrapper missing"
+fi
+DIR_JSON_OUT="$OUT9/04-derived/per-movie/test-dir.json"
+BROKEN_JSON_OUT="$OUT9/04-derived/per-movie/test-broken.json"
+if [ ! -e "$DIR_JSON_OUT" ] && [ ! -L "$DIR_JSON_OUT" ] && [ ! -e "$BROKEN_JSON_OUT" ] && [ ! -L "$BROKEN_JSON_OUT" ]; then
+  pass "47.non-regular JSON paths: invalid JSON sources not copied"
+else
+  fail "47.non-regular JSON paths: invalid JSON source copied"
+fi
+if python3 -c "
+import json, sys
+m = json.load(open(sys.argv[1]))
+assert set(m['slugs']) == {'test-broken', 'test-dir'}, f'slugs: {set(m[\"slugs\"])}'
+assert m['slugs']['test-dir']['rows'][0]['slug'] == 'test-dir'
+assert m['slugs']['test-broken']['rows'][0]['slug'] == 'test-broken'
+" "$OUT9/04-derived/manifest.json"; then
+  pass "48.non-regular JSON paths: manifest.json still includes both slugs"
+else
+  fail "48.non-regular JSON paths: manifest.json slug coverage broken"
+fi
+if printf '%s' "$RUN9_LOG" | grep -qF 'copied 0 per-movie JSON file(s)'; then
+  pass "49.non-regular JSON paths: copied count excludes invalid sources"
+else
+  fail "49.non-regular JSON paths: copied count did not exclude invalid sources"
+fi
+
+# 50-52 — If copy2 fails after creating the destination path, the builder
+# must not publish the partial JSON artifact. Monkeypatch copy2 to simulate
+# a late copy failure after a destination write, then assert the export keeps
+# only the manifest-derived wrapper.
+KB10=$(mktemp -d -t khexport-kb10.XXXXXX)
+trap "rm -rf $SYN_TMP $KB6 $KB7 $KB8 $KB9 $KB10" EXIT
+mkdir -p "$KB10/per-movie"
+echo '{"slug":"test-partial-copy","idx":1,"tc":"00:00:01:00","t_s":1.0}' > "$KB10/manifest.jsonl"
+echo '{"slug":"test-partial-copy","title":"Should Not Copy","year":2026}' > "$KB10/per-movie/test-partial-copy.json"
+OUT10="$KB10/out"
+RUN10_LOG=$(python3 - "$KB10" "$OUT10" "$SCRIPT" <<'PYEOF' 2>&1
+import sys
+from pathlib import Path
+
+script = Path(sys.argv[3]).resolve()
+sys.path.insert(0, str(script.parent))
+import build_kh_export
+
+def partial_copy_then_raise(src, dst):
+    Path(dst).write_text("partial-copy", encoding="utf-8")
+    raise OSError("simulated late copy failure")
+
+build_kh_export.shutil.copy2 = partial_copy_then_raise
+rc = build_kh_export.build(Path(sys.argv[1]), Path(sys.argv[2]))
+print(f"rc={rc}")
+PYEOF
+)
+rc=$?
+if [ "$rc" -eq 0 ] && printf '%s' "$RUN10_LOG" | grep -qF 'rc=0'; then
+  pass "50.partial copy failure: builder exits 0 after cleanup"
+else
+  fail "50.partial copy failure: builder failed (rc=$rc log: $RUN10_LOG)"
+fi
+if printf '%s' "$RUN10_LOG" | grep -qF 'per-movie JSON unreadable for test-partial-copy; skipping copy (OSError)'; then
+  pass "51.partial copy failure: warn breadcrumb emitted"
+else
+  fail "51.partial copy failure: missing warn breadcrumb"
+fi
+if printf '%s' "$RUN10_LOG" | grep -qF 'copied 0 per-movie JSON file(s)'; then
+  pass "52.partial copy failure: copied count excludes failed source"
+else
+  fail "52.partial copy failure: copied count did not exclude failed source"
+fi
+if [ ! -e "$OUT10/04-derived/per-movie/test-partial-copy.json" ] && [ ! -L "$OUT10/04-derived/per-movie/test-partial-copy.json" ] && [ -f "$OUT10/04-derived/per-movie/test-partial-copy.md" ]; then
+  pass "53.partial copy failure: partial JSON removed, wrapper preserved"
+else
+  fail "53.partial copy failure: partial JSON leaked or wrapper missing"
+fi
+PARTIAL_MD=$(cat "$OUT10/04-derived/per-movie/test-partial-copy.md")
+expect_in     "54a.partial copy failure: wrapper has_json false"       "has_per_movie_json: false" "$PARTIAL_MD"
+expect_not_in "54b.partial copy failure: wrapper ignores source title"  "Should Not Copy" "$PARTIAL_MD"
+if python3 -c "
+import json, sys
+m = json.load(open(sys.argv[1]))
+s = m['slugs']['test-partial-copy']
+assert s['title'] == 'test-partial-copy', f'title: {s[\"title\"]!r}'
+assert s['year'] is None, f'year: {s[\"year\"]!r}'
+" "$OUT10/04-derived/manifest.json"; then
+  pass "54c.partial copy failure: manifest header falls back"
+else
+  fail "54c.partial copy failure: manifest header did not fall back"
+fi
+
 # ----------------------------------------------------------------- summary ---
 rm -f "$REPO/.kh_export_run1.log" "$REPO/.kh_export_run2.log" "$REPO/.kh_export_run3.log" "$REPO/.kh_export_run4.log"
 
