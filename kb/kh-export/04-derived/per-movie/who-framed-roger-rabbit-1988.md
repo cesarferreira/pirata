@@ -50,8 +50,4 @@ pipeline-test artifact for the knowledge-hub ingest path.
 
 ## Caveats
 
-- This wrapper predates Unit 3 (KB enrichment in the IMDb x
-  pirata coupling plan). IMDb fields (tconst, rating, top_cast,
-  akas, genres, director, plot) are NOT populated. Regenerate
-  this export after Unit 3 ships.
 - Pipeline-test export, not a semantic-recall-complete KB.

@@ -31,14 +31,14 @@ A markdown wrapper exists for every slug in `kb/manifest.jsonl`, even when
 the per-movie JSON is missing or has degraded metadata. The wrapper makes
 the gap explicit so KH retrievers do not silently miss a slug.
 
-## Mario Galaxy caveat (current state)
+## Mario Galaxy caveat (transition state)
 
-`the-super-mario-galaxy-movie-2026` has a per-movie JSON at
-`kb/per-movie/the-super-mario-galaxy-movie-2026.json`, but its `title` field
-matches the slug and its `year` is null. This is a `contact_sheet.py`
-filename-parser miss against dot-separated release-dir names — not a KH
-issue. The wrapper carries this caveat explicitly. Unit 3 (IMDb x pirata
-coupling) resolves it via `tconst`-anchored enrichment.
+Until `scripts/contact_sheet.py --kb-imdb` is re-run for the Mario Galaxy
+release, `kb/per-movie/the-super-mario-galaxy-movie-2026.json` retains the
+pre-Unit-3 shape (title matches the slug, year is null). The wrapper
+preserves the existing caveat. After regeneration, the canonical title +
+year come from IMDb resolution and the wrapper carries the `## IMDb
+metadata` section instead.
 
 ## Regeneration
 
@@ -51,20 +51,22 @@ output. The build is staged in `kb/kh-export.tmp/` and atomically swapped
 over `kb/kh-export/` only after success, so partial failures never leave
 the export in a broken state.
 
-## Unit 3 dependency
+## Unit 3 (KB enrichment)
 
-The current per-movie wrappers contain only pipeline metadata (title, year,
-fps, frame count, scdet config) plus manifest-derived timecodes. Once Unit 3
-(KB enrichment in `scripts/contact_sheet.py`) ships, the per-movie JSONs
-will include IMDb fields (tconst, rating, top_cast, akas, genres, director,
-plot). After Unit 3, regenerate this export to expose those fields to kh.
+Unit 3 of plan 004 (the IMDb x pirata coupling) shipped 2026-04-26 across
+plan 007's sub-units A-G. When a per-movie JSON has an `imdb` block with
+`result == "resolved"`, the wrapper surfaces the IMDb fields (tconst,
+genres, rating, directors, top cast) in YAML frontmatter and a `## IMDb
+metadata` body section. When `result` is `multi_tie`, `no_match`, or
+`db_unavailable`, the wrapper omits the IMDb section so retrieval surface
+isn't polluted with negative signals; the caveat block records the failure
+reason instead.
 
 ## License
 
-The IMDb non-commercial license applies to any IMDb-derived fields, once
-Unit 3 populates them. For v1 (pre-Unit-3), no IMDb data is present and
-the license is moot. The kh has no license metadata field convention; this
-constraint is documented here rather than encoded in metadata.
+The IMDb non-commercial license applies to any IMDb-derived fields surfaced
+by Unit 3. The kh has no license metadata field convention; this constraint
+is documented here rather than encoded in metadata.
 
 If `kh` is ever served beyond Vidigal's local Dante machine (cross-workspace
 sync, multi-tenant), the IMDb-derived fields must be stripped from this
