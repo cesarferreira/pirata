@@ -16,5 +16,14 @@ imdb/.refresh.lock
 logs/skill_imdb_events.jsonl
 logs/sweep_imdb_misses.log
 
+# kb derived assets — re-derivable from canonical kb/per-movie/*.json
+# + kb/manifest.jsonl given source MKVs. Tracking would scale linearly
+# with catalog growth (~20 MB per movie).
+kb/frames/
+kb/contact-sheets/
+
+# unstructured runtime debug logs (structured event logs gitignored above)
+logs/*.log
+
 # OS noise
 .DS_Store
