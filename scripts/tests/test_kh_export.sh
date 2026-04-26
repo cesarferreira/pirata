@@ -89,13 +89,13 @@ else
   fail "09.per-movie JSON does not parse"
 fi
 
-# Markdown wrapper contains all 4 required literal strings.
+# Markdown wrapper contains all required literal strings.
 # Plan 008 Unit 2 changed Roger Rabbit's source title from "Who Framed
 # Roger Rabbit (1988)" (filename-based) to "Who Framed Roger Rabbit"
-# (IMDb primaryTitle). The year is still surfaced via the YAML
-# frontmatter (year: 1988); the title literal no longer carries the
-# parens-year suffix.
-for needle in "Roger Rabbit" "Who Framed Roger Rabbit" "who-framed-roger-rabbit-1988" "scdet"; do
+# (IMDb primaryTitle). Plan 009 Unit 3 restores the parens-year alias
+# via a "Title with year" body line so KH retrievers can match the
+# searchable token even when the IMDb-canonical title omits it.
+for needle in "Roger Rabbit" "Who Framed Roger Rabbit" "Who Framed Roger Rabbit (1988)" "who-framed-roger-rabbit-1988" "scdet"; do
   if grep -qF "$needle" "$PER_MOVIE_DST_MD"; then
     pass "10.MD contains literal: $needle"
   else
@@ -173,6 +173,24 @@ if grep -qF "Robert Zemeckis" "$RR_DST_MD" 2>/dev/null; then
   pass "11h.Roger Rabbit wrapper names Robert Zemeckis as director"
 else
   fail "11h.Roger Rabbit wrapper missing director attribution"
+fi
+
+# Plan 009 Unit 3: per-movie JSON title/year now overlays the slug-level
+# display metadata in manifest.json (was stale slug+null for MG, since
+# kb/manifest.jsonl is byte-frozen and predates plan 008's IMDb resolve).
+# Raw row provenance must remain intact under slugs[<slug>].rows[].
+if python3 -c "
+import json, sys
+m = json.load(open(sys.argv[1]))
+mg = m['slugs']['the-super-mario-galaxy-movie-2026']
+assert mg['title'] == 'The Super Mario Galaxy Movie', f'MG header title: {mg[\"title\"]!r}'
+assert mg['year'] == 2026, f'MG header year: {mg[\"year\"]!r}'
+assert mg['rows'][0]['title'] == 'the-super-mario-galaxy-movie-2026', f'raw row title overwritten: {mg[\"rows\"][0][\"title\"]!r}'
+assert mg['rows'][0]['year'] is None, f'raw row year overwritten: {mg[\"rows\"][0][\"year\"]!r}'
+" "$MANIFEST_DST" 2>/dev/null; then
+  pass "11i.MG manifest.json display title/year overlay + raw row provenance preserved"
+else
+  fail "11i.MG manifest.json overlay or provenance broken"
 fi
 
 # README is non-empty

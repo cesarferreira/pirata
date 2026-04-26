@@ -31,14 +31,14 @@ A markdown wrapper exists for every slug in `kb/manifest.jsonl`, even when
 the per-movie JSON is missing or has degraded metadata. The wrapper makes
 the gap explicit so KH retrievers do not silently miss a slug.
 
-## Mario Galaxy caveat (transition state)
+## Slug-level display metadata
 
-Until `scripts/contact_sheet.py --kb-imdb` is re-run for the Mario Galaxy
-release, `kb/per-movie/the-super-mario-galaxy-movie-2026.json` retains the
-pre-Unit-3 shape (title matches the slug, year is null). The wrapper
-preserves the existing caveat. After regeneration, the canonical title +
-year come from IMDb resolution and the wrapper carries the `## IMDb
-metadata` section instead.
+`manifest.json` carries `kb/manifest.jsonl` rows verbatim under
+`slugs[<slug>].rows[]`. The slug header (`title`, `year`) prefers the
+per-movie JSON's resolved IMDb fields when available, falling back to the
+manifest-derived values otherwise. This keeps raw row provenance intact
+while letting the slug header reflect the best-available display metadata
+even when `kb/manifest.jsonl` predates IMDb resolution.
 
 ## Regeneration
 

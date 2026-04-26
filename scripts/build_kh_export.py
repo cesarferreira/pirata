@@ -134,8 +134,16 @@ def collect_manifest_groups(jsonl_path: Path) -> dict[str, dict]:
     return groups
 
 
-def build_manifest_json(groups: dict[str, dict]) -> dict:
-    """Assemble the slug-grouped manifest.json document."""
+def build_manifest_json(groups: dict[str, dict],
+                        per_movie_paths: dict[str, Path] | None = None) -> dict:
+    """Assemble the slug-grouped manifest.json document.
+
+    Per-movie JSON title/year overlays the manifest-derived values when
+    stronger (same rule as build_slug_md), so the slug-level display
+    metadata reflects resolved IMDb when available. Raw rows are preserved
+    verbatim — provenance lives in `rows[]`, the slug header carries the
+    best-available display metadata."""
+    per_movie_paths = per_movie_paths or {}
     slugs_dict: dict[str, dict] = {}
     total_rows = 0
     for slug in sorted(groups):
@@ -144,9 +152,23 @@ def build_manifest_json(groups: dict[str, dict]) -> dict:
         total_rows += len(rows)
         first = rows[0] if rows else {}
         last = rows[-1] if rows else {}
+        title = g["title"]
+        year = g["year"]
+        json_path = per_movie_paths.get(slug)
+        if json_path and json_path.is_file():
+            try:
+                jd = json.loads(json_path.read_text(encoding="utf-8"))
+                j_title = jd.get("title")
+                j_year = jd.get("year")
+                if j_title and j_title != slug:
+                    title = j_title
+                if j_year is not None:
+                    year = j_year
+            except (json.JSONDecodeError, OSError):
+                pass  # keep manifest-derived values on parse/IO failure
         slugs_dict[slug] = {
-            "title": g["title"],
-            "year": g["year"],
+            "title": title,
+            "year": year,
             "frame_count": len(rows),
             "first_tc": first.get("tc"),
             "last_tc": last.get("tc"),
@@ -272,6 +294,8 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
     body.append("")
     body.append(f"- Title: {title}")
     body.append(f"- Year: {year}")
+    if not title_is_slug and not year_missing:
+        body.append(f"- Title with year: {title} ({year})")
     body.append(f"- Frames extracted (manifest): {frame_count}")
     body.append(f"- First timecode: {first_tc} ({first_t_s} s)")
     body.append(f"- Last timecode:  {last_tc} ({last_t_s} s)")
@@ -388,14 +412,14 @@ A markdown wrapper exists for every slug in `kb/manifest.jsonl`, even when
 the per-movie JSON is missing or has degraded metadata. The wrapper makes
 the gap explicit so KH retrievers do not silently miss a slug.
 
-## Mario Galaxy caveat (transition state)
+## Slug-level display metadata
 
-Until `scripts/contact_sheet.py --kb-imdb` is re-run for the Mario Galaxy
-release, `kb/per-movie/the-super-mario-galaxy-movie-2026.json` retains the
-pre-Unit-3 shape (title matches the slug, year is null). The wrapper
-preserves the existing caveat. After regeneration, the canonical title +
-year come from IMDb resolution and the wrapper carries the `## IMDb
-metadata` section instead.
+`manifest.json` carries `kb/manifest.jsonl` rows verbatim under
+`slugs[<slug>].rows[]`. The slug header (`title`, `year`) prefers the
+per-movie JSON's resolved IMDb fields when available, falling back to the
+manifest-derived values otherwise. This keeps raw row provenance intact
+while letting the slug header reflect the best-available display metadata
+even when `kb/manifest.jsonl` predates IMDb resolution.
 
 ## Regeneration
 
@@ -486,7 +510,7 @@ def build(kb: Path, out: Path) -> int:
 
     # Step 4: write slug-grouped manifest.json.
     if manifest_groups:
-        manifest_doc = build_manifest_json(manifest_groups)
+        manifest_doc = build_manifest_json(manifest_groups, per_movie_paths)
         (derived / "manifest.json").write_text(
             json.dumps(manifest_doc, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",

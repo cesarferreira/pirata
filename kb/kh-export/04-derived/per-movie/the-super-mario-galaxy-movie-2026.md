@@ -38,6 +38,7 @@ pipeline-test artifact for the knowledge-hub ingest path.
 
 - Title: The Super Mario Galaxy Movie
 - Year: 2026
+- Title with year: The Super Mario Galaxy Movie (2026)
 - Frames extracted (manifest): 300
 - First timecode: 00:00:42:05 (42.229 s)
 - Last timecode:  01:37:44:09 (5864.396 s)

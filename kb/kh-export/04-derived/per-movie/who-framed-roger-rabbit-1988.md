@@ -38,6 +38,7 @@ pipeline-test artifact for the knowledge-hub ingest path.
 
 - Title: Who Framed Roger Rabbit
 - Year: 1988
+- Title with year: Who Framed Roger Rabbit (1988)
 - Frames extracted (manifest): 300
 - First timecode: 00:00:08:09 (8.425 s)
 - Last timecode:  01:36:26:15 (5792.453 s)

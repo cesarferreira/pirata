@@ -5,8 +5,8 @@
   "row_count": 600,
   "slugs": {
     "the-super-mario-galaxy-movie-2026": {
-      "title": "the-super-mario-galaxy-movie-2026",
-      "year": null,
+      "title": "The Super Mario Galaxy Movie",
+      "year": 2026,
       "frame_count": 300,
       "first_tc": "00:00:42:05",
       "last_tc": "01:37:44:09",
@@ -2716,7 +2716,7 @@
       ]
     },
     "who-framed-roger-rabbit-1988": {
-      "title": "Who Framed Roger Rabbit (1988)",
+      "title": "Who Framed Roger Rabbit",
       "year": 1988,
       "frame_count": 300,
       "first_tc": "00:00:08:09",
