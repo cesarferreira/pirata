@@ -1,7 +1,7 @@
 ---
 title: "fix: Harden KH export JSON fallbacks"
 type: fix
-status: active
+status: completed
 date: 2026-04-26
 origin: docs/prompts/2026-04-26-codex-review-plan-010.md
 predecessor: docs/plans/2026-04-26-010-fix-kh-export-symmetric-errors-plan.md
