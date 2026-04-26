@@ -1,7 +1,7 @@
 {
   "slug": "the-super-mario-galaxy-movie-2026",
-  "title": "the-super-mario-galaxy-movie-2026",
-  "year": null,
+  "title": "The Super Mario Galaxy Movie",
+  "year": 2026,
   "fps": 24.0,
   "runtime_s": 5881.05,
   "source_file": "/Users/vidigal/claude-code/pirata/downloads/The.Super.Mario.Galaxy.Movie.2026.1080p.WEBRip.HEVC.x265-RMTeam/The Super Mario Galaxy Movie 2026 1080p Multi Webrip HEVC x265-RMTeam.mkv",
@@ -12,6 +12,19 @@
     "target": 300
   },
   "extracted_at": "2026-04-26T05:00:50Z",
+  "filename": {
+    "raw_title": "the-super-mario-galaxy-movie-2026",
+    "ptt_title": "The Super Mario Galaxy Movie",
+    "ptt_year": 2026
+  },
+  "imdb": {
+    "lookup_attempted": true,
+    "result": "multi_tie",
+    "candidates_considered": 14,
+    "top_score": 100.0,
+    "runner_up_score": 100.0,
+    "multi_tie": true
+  },
   "frames": [
     {
       "idx": 1,

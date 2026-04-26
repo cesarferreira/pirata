@@ -132,15 +132,25 @@ if grep -qF "the-super-mario-galaxy-movie-2026" "$MG_DST_MD" 2>/dev/null; then
 else
   fail "11b.Mario Galaxy wrapper missing slug literal"
 fi
-if grep -qF "matches the slug" "$MG_DST_MD" 2>/dev/null; then
-  pass "11c.Mario Galaxy wrapper notes title-equals-slug caveat"
+# Post-Unit-3 (plan 007 Unit G): Mario Galaxy per-movie JSON has been
+# regenerated with canonical title="The Super Mario Galaxy Movie",
+# year=2026, and an imdb block (multi_tie outcome). The wrapper now
+# carries the cleaned title/year + a multi_tie caveat instead of the
+# old "title equals slug" + "Year is null" caveats.
+if grep -qF 'title: "The Super Mario Galaxy Movie"' "$MG_DST_MD" 2>/dev/null; then
+  pass "11c.Mario Galaxy wrapper has canonical title (not slug)"
 else
-  fail "11c.Mario Galaxy wrapper missing title-equals-slug caveat"
+  fail "11c.Mario Galaxy wrapper missing canonical title"
 fi
-if grep -qF "Year is null" "$MG_DST_MD" 2>/dev/null; then
-  pass "11d.Mario Galaxy wrapper notes null-year caveat"
+if grep -qF "year: 2026" "$MG_DST_MD" 2>/dev/null; then
+  pass "11d.Mario Galaxy wrapper has year=2026"
 else
-  fail "11d.Mario Galaxy wrapper missing null-year caveat"
+  fail "11d.Mario Galaxy wrapper missing year=2026"
+fi
+if grep -qF "returned multi_tie" "$MG_DST_MD" 2>/dev/null; then
+  pass "11e.Mario Galaxy wrapper notes multi_tie IMDb outcome"
+else
+  fail "11e.Mario Galaxy wrapper missing multi_tie caveat"
 fi
 
 # README is non-empty

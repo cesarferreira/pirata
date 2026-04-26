@@ -1,7 +1,7 @@
 ---
 slug: "the-super-mario-galaxy-movie-2026"
-title: "the-super-mario-galaxy-movie-2026"
-year: null
+title: "The Super Mario Galaxy Movie"
+year: 2026
 frame_count: 300
 first_tc: "00:00:42:05"
 last_tc: "01:37:44:09"
@@ -20,18 +20,18 @@ scdet:
   target: 300
 ---
 
-# the-super-mario-galaxy-movie-2026
+# The Super Mario Galaxy Movie
 
 Slug: `the-super-mario-galaxy-movie-2026`
 
-This is the contact-sheet derivative for the slug `the-super-mario-galaxy-movie-2026`.
+This is the contact-sheet derivative for the 2026 film The Super Mario Galaxy Movie.
 It was extracted from a single source video and serves as a
 pipeline-test artifact for the knowledge-hub ingest path.
 
 ## Pipeline metadata
 
-- Title: the-super-mario-galaxy-movie-2026
-- Year: None
+- Title: The Super Mario Galaxy Movie
+- Year: 2026
 - Frames extracted (manifest): 300
 - First timecode: 00:00:42:05 (42.229 s)
 - Last timecode:  01:37:44:09 (5864.396 s)
@@ -50,14 +50,7 @@ pipeline-test artifact for the knowledge-hub ingest path.
 
 ## Caveats
 
-- Title `the-super-mario-galaxy-movie-2026` matches the slug — the filename parser
-  did not extract a human title. Unit 3 (IMDb enrichment)
-  resolves this with `tconst`-anchored fields.
-- Year is null — likely a parser miss on a dot-separated
-  release filename. Unit 3 enrichment will populate this
-  from IMDb.
-- This wrapper predates Unit 3 (KB enrichment in the IMDb x
-  pirata coupling plan). IMDb fields (tconst, rating, top_cast,
-  akas, genres, director, plot) are NOT populated. Regenerate
-  this export after Unit 3 ships.
+- IMDb resolution returned multi_tie (top_score=100.0,
+  runner_up_score=100.0). Canonical title/year fall back
+  to PTN-cleaned values; tconst is not anchored.
 - Pipeline-test export, not a semantic-recall-complete KB.
