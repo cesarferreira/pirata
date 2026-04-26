@@ -165,7 +165,11 @@ def build_manifest_json(groups: dict[str, dict],
                 if j_year is not None:
                     year = j_year
             except (json.JSONDecodeError, OSError):
-                pass  # keep manifest-derived values on parse/IO failure
+                # Keep manifest-derived values on parse/IO failure (symmetric
+                # with build_slug_md). Surface as warn so corruption is
+                # observable instead of silently degrading the header.
+                log("warn", f"per-movie JSON unreadable for {slug}; "
+                            f"manifest.json header falls back to manifest-derived title/year")
         slugs_dict[slug] = {
             "title": title,
             "year": year,
@@ -203,14 +207,24 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
     has_json = per_movie_json is not None and per_movie_json.is_file()
     json_data: dict[str, Any] = {}
     if has_json:
-        json_data = json.loads(per_movie_json.read_text(encoding="utf-8"))
-        # Overlay title/year if the per-movie JSON has stronger values.
-        j_title = json_data.get("title")
-        j_year = json_data.get("year")
-        if j_title and j_title != slug:
-            title = j_title
-        if j_year is not None:
-            year = j_year
+        try:
+            json_data = json.loads(per_movie_json.read_text(encoding="utf-8"))
+            # Overlay title/year if the per-movie JSON has stronger values.
+            j_title = json_data.get("title")
+            j_year = json_data.get("year")
+            if j_title and j_title != slug:
+                title = j_title
+            if j_year is not None:
+                year = j_year
+        except (json.JSONDecodeError, OSError):
+            # Symmetric with build_manifest_json: corrupt/unreadable per-movie
+            # JSON degrades to bare-wrapper rendering instead of crashing the
+            # whole builder. has_json=False routes downstream code through
+            # the manifest-only path (no IMDb block, no fps/runtime/scdet).
+            has_json = False
+            json_data = {}
+            log("warn", f"per-movie JSON unreadable for {slug}; "
+                        f"falling back to bare-wrapper rendering")
 
     fps = json_data.get("fps") if has_json else None
     runtime_s = json_data.get("runtime_s") if has_json else None

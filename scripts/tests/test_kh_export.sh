@@ -187,7 +187,7 @@ assert mg['title'] == 'The Super Mario Galaxy Movie', f'MG header title: {mg[\"t
 assert mg['year'] == 2026, f'MG header year: {mg[\"year\"]!r}'
 assert mg['rows'][0]['title'] == 'the-super-mario-galaxy-movie-2026', f'raw row title overwritten: {mg[\"rows\"][0][\"title\"]!r}'
 assert mg['rows'][0]['year'] is None, f'raw row year overwritten: {mg[\"rows\"][0][\"year\"]!r}'
-" "$MANIFEST_DST" 2>/dev/null; then
+" "$MANIFEST_DST"; then
   pass "11i.MG manifest.json display title/year overlay + raw row provenance preserved"
 else
   fail "11i.MG manifest.json overlay or provenance broken"
@@ -459,6 +459,147 @@ if [ "$out1" = "$out2" ]; then
   pass "27.determinism: two renders byte-identical"
 else
   fail "27.determinism: render drift detected"
+fi
+
+# 5f — Plan 010 Unit 3: 'Title with year' alias suppression branch.
+# When title==slug OR year==null, the parens-year body line must be absent
+# (else KH retrieval would see literal '<slug> (None)' or '<slug> (<slug>)'
+# polluting the index). The L297-298 guard `not title_is_slug and not
+# year_missing` is exercised here — fixtures only-positive-side until now.
+SUPPRESS_BOTH_JSON="$SYN_TMP/test-suppress-both.json"
+cat > "$SUPPRESS_BOTH_JSON" <<'EOF'
+{
+  "slug": "test-suppress-both",
+  "title": "test-suppress-both",
+  "year": null,
+  "fps": 24.0,
+  "runtime_s": 5400.0,
+  "scdet": {"threshold": 8, "floor_s": 4.0, "target": 300},
+  "extracted_at": "2026-04-26T16:00:00Z",
+  "frames": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}],
+  "sheets": []
+}
+EOF
+out=$(python3 - "$SUPPRESS_BOTH_JSON" <<'PYEOF'
+import json, sys
+sys.path.insert(0, "scripts")
+import build_kh_export
+group = {"title": "test-suppress-both", "year": None,
+         "rows": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}]}
+print(build_kh_export.build_slug_md("test-suppress-both", group, type("P",(object,),{"is_file":lambda self:True,"read_text":lambda self,encoding=None:open(sys.argv[1]).read()})()))
+PYEOF
+)
+expect_not_in "28a.suppress-both: no Title with year alias"     'Title with year:' "$out"
+expect_in     "28b.suppress-both: slug literal still surfaces"  'test-suppress-both' "$out"
+
+# 5g — only year is missing (title resolves to a real value via overlay).
+# year_missing alone must trip the suppression guard.
+SUPPRESS_YEAR_JSON="$SYN_TMP/test-suppress-year.json"
+cat > "$SUPPRESS_YEAR_JSON" <<'EOF'
+{
+  "slug": "test-suppress-year",
+  "title": "Some Movie",
+  "year": null,
+  "fps": 24.0,
+  "runtime_s": 5400.0,
+  "scdet": {"threshold": 8, "floor_s": 4.0, "target": 300},
+  "extracted_at": "2026-04-26T16:00:00Z",
+  "frames": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}],
+  "sheets": []
+}
+EOF
+out=$(python3 - "$SUPPRESS_YEAR_JSON" <<'PYEOF'
+import json, sys
+sys.path.insert(0, "scripts")
+import build_kh_export
+group = {"title": "test-suppress-year", "year": None,
+         "rows": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}]}
+print(build_kh_export.build_slug_md("test-suppress-year", group, type("P",(object,),{"is_file":lambda self:True,"read_text":lambda self,encoding=None:open(sys.argv[1]).read()})()))
+PYEOF
+)
+expect_not_in "28c.suppress-year-only: no Title with year alias" 'Title with year:' "$out"
+expect_in     "28d.suppress-year-only: title overlaid from JSON" '- Title: Some Movie' "$out"
+
+# 5h — only title equals slug (year resolves). title_is_slug alone must trip.
+SUPPRESS_TITLE_JSON="$SYN_TMP/test-suppress-title.json"
+cat > "$SUPPRESS_TITLE_JSON" <<'EOF'
+{
+  "slug": "test-suppress-title",
+  "title": "test-suppress-title",
+  "year": 2020,
+  "fps": 24.0,
+  "runtime_s": 5400.0,
+  "scdet": {"threshold": 8, "floor_s": 4.0, "target": 300},
+  "extracted_at": "2026-04-26T16:00:00Z",
+  "frames": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}],
+  "sheets": []
+}
+EOF
+out=$(python3 - "$SUPPRESS_TITLE_JSON" <<'PYEOF'
+import json, sys
+sys.path.insert(0, "scripts")
+import build_kh_export
+group = {"title": "test-suppress-title", "year": 2020,
+         "rows": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}]}
+print(build_kh_export.build_slug_md("test-suppress-title", group, type("P",(object,),{"is_file":lambda self:True,"read_text":lambda self,encoding=None:open(sys.argv[1]).read()})()))
+PYEOF
+)
+expect_not_in "28e.suppress-title-only: no Title with year alias" 'Title with year:' "$out"
+expect_in     "28f.suppress-title-only: year overlaid from JSON"  '- Year: 2020' "$out"
+
+# ----------------------------------------------------------------- run 6 ---
+# Plan 010 Unit 2: hermetic kb/-shape tmpdir with corrupt per-movie JSON.
+# Proves the symmetric fallback in build_manifest_json (silent overlay
+# error path) and build_slug_md (Unit 1 hardening) both degrade gracefully
+# instead of crashing the builder. Pre-Unit-1, build_slug_md raised on the
+# corrupt JSON before manifest.json was ever written, making this test
+# physically unreachable. Now both functions emit a warn breadcrumb and
+# the builder completes, manifest.json header falls back to manifest-derived
+# slug-shaped title with year=null, and raw rows[] ship verbatim.
+echo "=== run 6: corrupt per-movie JSON fallback (plan 010) ==="
+KB6=$(mktemp -d -t khexport-kb6.XXXXXX)
+trap "rm -rf $SYN_TMP $KB6" EXIT  # combined cleanup with run-5 SYN_TMP
+mkdir -p "$KB6/per-movie"
+echo '{"slug":"test-corrupt","idx":1,"tc":"00:00:01:00","t_s":1.0}' > "$KB6/manifest.jsonl"
+echo '{ not json' > "$KB6/per-movie/test-corrupt.json"
+OUT6="$KB6/out"
+RUN6_LOG=$(python3 "$SCRIPT" --kb "$KB6" --out "$OUT6" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ]; then pass "29.corrupt JSON: builder exits 0 (graceful)"; else fail "29.corrupt JSON: builder exit was $rc (log: $RUN6_LOG)"; fi
+# Warn breadcrumb fires (build_manifest_json + build_slug_md each log once;
+# we just assert the slug name appears in a warn line — both messages name
+# the slug, so a single check covers either path).
+if printf '%s' "$RUN6_LOG" | grep -qE 'warn:.*per-movie JSON unreadable for test-corrupt'; then
+  pass "30.corrupt JSON: warn breadcrumb emitted"
+else
+  fail "30.corrupt JSON: no warn breadcrumb"
+fi
+# manifest.json header falls back to manifest-derived slug-shaped title +
+# year=null; raw rows[] preserved verbatim from manifest.jsonl input.
+if python3 -c "
+import json, sys
+m = json.load(open(sys.argv[1]))
+s = m['slugs']['test-corrupt']
+assert s['title'] == 'test-corrupt', f'header title: {s[\"title\"]!r} (expected manifest-derived slug fallback)'
+assert s['year'] is None, f'header year: {s[\"year\"]!r} (expected None)'
+assert s['rows'][0]['slug'] == 'test-corrupt', f'row slug: {s[\"rows\"][0][\"slug\"]!r}'
+assert s['rows'][0]['idx'] == 1, f'row idx: {s[\"rows\"][0][\"idx\"]!r}'
+" "$OUT6/04-derived/manifest.json"; then
+  pass "31.corrupt JSON: manifest.json header falls back, rows[] preserved"
+else
+  fail "31.corrupt JSON: header overlay or row provenance broken"
+fi
+# build_slug_md fallback: wrapper file gets written (no crash), in bare-
+# manifest mode (no IMDb section, no fps/runtime body fields).
+if [ -f "$OUT6/04-derived/per-movie/test-corrupt.md" ]; then
+  pass "32.corrupt JSON: bare wrapper still produced"
+else
+  fail "32.corrupt JSON: wrapper missing (build_slug_md may have crashed)"
+fi
+if grep -qF "## IMDb metadata" "$OUT6/04-derived/per-movie/test-corrupt.md" 2>/dev/null; then
+  fail "33.corrupt JSON: wrapper unexpectedly emitted IMDb section"
+else
+  pass "33.corrupt JSON: wrapper rendered in bare-manifest mode"
 fi
 
 # ----------------------------------------------------------------- summary ---
