@@ -139,17 +139,20 @@ echo "=== T3: kb_root gating (covered at main() level) ==="
 pass "3.export_kb gating is enforced at main(), not export_kb itself"
 
 # ---------------------------------------------------------------- T4 -------
-# multi_tie scenario: Roger Rabbit (movie + video game share exact title).
-echo "=== T4: multi_tie (Who Framed Roger Rabbit 1988) ==="
+# multi_tie via year-guard: "Dune" without year hint matches the 1984 Lynch
+# film (~80k votes) AND the 2021 Villeneuve film (~600k votes). Both tier-1,
+# different start_years → vote-spread tie-breaker (plan 008) preserves
+# multi_tie via the same-year guard. Roger Rabbit and Mario Galaxy USED to
+# multi_tie pre-plan-008 but now resolve via the override.
+echo "=== T4: multi_tie via year-guard (Dune no-year hint) ==="
 KB4="$TMP/kb4"
 mkdir -p "$KB4"
-movie_json=$(run_export "$KB4" "who-framed-roger-rabbit-1988" "Who.Framed.Roger.Rabbit.1988.1080p.BluRay.x264" "true" 2>&1 | tail -1)
+movie_json=$(run_export "$KB4" "dune" "Dune.1080p.BluRay.x265" "true" 2>&1 | tail -1)
 content=$(cat "$movie_json")
 expect_in     "4a.imdb result multi_tie"           '"result": "multi_tie"'          "$content"
 expect_in     "4b.imdb multi_tie true"             '"multi_tie": true'              "$content"
 # Canonical falls back to PTN cleanup.
-expect_in     "4c.canonical title from PTN"        '"title": "Who Framed Roger Rabbit"' "$content"
-expect_in     "4d.year 1988 from PTN"              '"year": 1988'                   "$content"
+expect_in     "4c.canonical title from PTN"        '"title": "Dune"'                "$content"
 # filename block still present (records the raw input + ptt parse).
 expect_in     "4e.filename block preserved"        '"filename":'                    "$content"
 

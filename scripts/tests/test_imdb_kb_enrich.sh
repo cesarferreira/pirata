@@ -118,15 +118,28 @@ expect_not_in "4.canonical not slug literal"     '"canonical_title": "the-super-
 expect_in "4.canonical_year 2026"                '"canonical_year": 2026'              "$out"
 
 # ---------------------------------------------------------------- T5 -------
-# multi_tie surfaces when imdb_lookup flags top match: Roger Rabbit
-# returns the famous 1988 movie + a video game with same exact title.
-echo "=== T5: multi_tie (Roger Rabbit 1988) ==="
+# Plan 008: vote-spread tie-breaker. Roger Rabbit USED to multi_tie because
+# imdb_lookup flagged tt0096438 (movie, 233k votes) and tt0295691 (videoGame,
+# 210 votes) as a same-year tier-1 score-tie. The override fires (1110× vote
+# spread, same year) and demotes top.multi_tie → resolves to the famous movie.
+echo "=== T5: vote-spread override fires (Roger Rabbit 1988) ==="
 out=$(run "Who.Framed.Roger.Rabbit.1988.1080p.BluRay.x264")
-expect_in "5.imdb result multi_tie"              '"result": "multi_tie"'               "$out"
-expect_in "5.imdb multi_tie true"                '"multi_tie": true'                   "$out"
-# Canonical falls back to PTN values.
-expect_in "5.canonical from PTN"                 '"canonical_title": "Who Framed Roger Rabbit"' "$out"
-expect_in "5.canonical_year 1988"                '"canonical_year": 1988'              "$out"
+expect_in "5.imdb result resolved"               '"result": "resolved"'                "$out"
+expect_in "5.imdb tconst tt0096438"              '"tconst": "tt0096438"'               "$out"
+expect_in "5.imdb multi_tie false"               '"multi_tie": false'                  "$out"
+expect_in "5.imdb has director (Zemeckis)"       '"name": "Robert Zemeckis"'           "$out"
+expect_in "5.imdb has rating average"            '"average": 7.7'                      "$out"
+
+# ---------------------------------------------------------------- T5b ------
+# Year guard: when top + runner have different start_years, override does NOT
+# fire even if vote spread is otherwise dominant. "Dune" without year hint
+# returns Lynch 1984 (~80k votes) AND Villeneuve 2021 (~600k votes) — both
+# tier-1 score-tied, but year mismatch → year-disambiguation is the right
+# answer, not auto-pick. Multi_tie preserved.
+echo "=== T5b: year guard preserves multi_tie (Dune no-year) ==="
+out=$(run "Dune.1080p.BluRay.x265")
+expect_in "5b.imdb result multi_tie"             '"result": "multi_tie"'               "$out"
+expect_in "5b.imdb multi_tie true"               '"multi_tie": true'                   "$out"
 
 # ---------------------------------------------------------------- T6 -------
 # Gibberish: no IMDb match; canonical falls back to PTN cleanup.
@@ -195,6 +208,120 @@ case "$akas_count" in
     fi
     ;;
 esac
+
+# ---------------------------------------------------------------- T11 ------
+# Plan 008: Mario Galaxy real-DB scenario — same-titled tvEpisodes share the
+# slug but have 0 votes vs the movie's 38k+. Vote-spread fires; override
+# resolves to tt28650488.
+echo "=== T11: vote-spread override fires (Mario Galaxy) ==="
+out=$(run "the-super-mario-galaxy-movie-2026" "the-super-mario-galaxy-movie-2026")
+expect_in "11.imdb result resolved"              '"result": "resolved"'                "$out"
+expect_in "11.imdb tconst tt28650488"            '"tconst": "tt28650488"'              "$out"
+expect_in "11.imdb multi_tie false"              '"multi_tie": false'                  "$out"
+expect_in "11.imdb has rating votes"             '"votes":'                            "$out"
+
+# ---------------------------------------------------------------- T13 ------
+# Synthetic Match dataclasses: top.num_votes=100, runner.num_votes=20, same
+# year. Vote ratio 5× < 10× threshold → override does NOT fire, multi_tie
+# preserved. Tests the helper in isolation without touching the live DB.
+echo "=== T13: synthetic 5x ratio preserves multi_tie ==="
+out=$(python3 - <<'PYEOF'
+import sys
+sys.path.insert(0, "scripts")
+import imdb_kb_enrich  # also re-exports Match via from-import
+Match = imdb_kb_enrich.Match
+
+def mk(tconst, votes, year=2020, multi_tie=True):
+    return Match(
+        tconst=tconst, primary_title="X", original_title="X",
+        title_type="movie", start_year=year, score=300.0, field="primary",
+        matched_text="X", fuzz_ratio=100.0, num_votes=votes,
+        average_rating=7.0, multi_tie=multi_tie,
+    )
+
+result = imdb_kb_enrich._apply_vote_tie_breaker([mk("tt001", 100), mk("tt002", 20)])
+print("top_multi_tie:", result[0].multi_tie)
+print("len:", len(result))
+PYEOF
+)
+expect_in "13.5x ratio preserves top.multi_tie"  'top_multi_tie: True'                 "$out"
+expect_in "13.list length unchanged"             'len: 2'                              "$out"
+
+# ---------------------------------------------------------------- T14 ------
+# Synthetic Match dataclasses: top.num_votes=50000, runner.num_votes=10,
+# DIFFERENT years. Vote spread is 5000× but year guard triggers → multi_tie
+# preserved. Year mismatch is the genuine year-disambiguation signal.
+echo "=== T14: synthetic year mismatch preserves multi_tie ==="
+out=$(python3 - <<'PYEOF'
+import sys
+sys.path.insert(0, "scripts")
+import imdb_kb_enrich  # also re-exports Match via from-import
+Match = imdb_kb_enrich.Match
+
+def mk(tconst, votes, year, multi_tie=True):
+    return Match(
+        tconst=tconst, primary_title="X", original_title="X",
+        title_type="movie", start_year=year, score=300.0, field="primary",
+        matched_text="X", fuzz_ratio=100.0, num_votes=votes,
+        average_rating=7.0, multi_tie=multi_tie,
+    )
+
+result = imdb_kb_enrich._apply_vote_tie_breaker(
+    [mk("tt001", 50000, 2021), mk("tt002", 10, 1984)]
+)
+print("top_multi_tie:", result[0].multi_tie)
+PYEOF
+)
+expect_in "14.year-mismatch preserves multi_tie" 'top_multi_tie: True'                 "$out"
+
+# ---------------------------------------------------------------- T15 ------
+# Synthetic Match dataclasses: top.num_votes=100, runner.num_votes=0, same
+# year. max(1, 0) = 1, 100 / 1 = 100× > 10× → override fires.
+# This is the typical zero-vote tvEpisode tribute pattern.
+echo "=== T15: synthetic zero-runner override fires ==="
+out=$(python3 - <<'PYEOF'
+import sys
+sys.path.insert(0, "scripts")
+import imdb_kb_enrich  # also re-exports Match via from-import
+Match = imdb_kb_enrich.Match
+
+def mk(tconst, votes, year=2020, multi_tie=True):
+    return Match(
+        tconst=tconst, primary_title="X", original_title="X",
+        title_type="movie", start_year=year, score=300.0, field="primary",
+        matched_text="X", fuzz_ratio=100.0, num_votes=votes,
+        average_rating=7.0, multi_tie=multi_tie,
+    )
+
+result = imdb_kb_enrich._apply_vote_tie_breaker([mk("tt001", 100), mk("tt002", 0)])
+print("top_multi_tie:", result[0].multi_tie)
+print("runner_multi_tie:", result[1].multi_tie)
+PYEOF
+)
+expect_in "15.zero-runner override fires"        'top_multi_tie: False'                "$out"
+expect_in "15.runner flag left intact"           'runner_multi_tie: True'              "$out"
+
+# ---------------------------------------------------------------- T16 ------
+# Edge case: single-match list with multi_tie=True. Helper returns unchanged
+# (len < 2 guard).
+echo "=== T16: single-match list short-circuits ==="
+out=$(python3 - <<'PYEOF'
+import sys
+sys.path.insert(0, "scripts")
+import imdb_kb_enrich  # also re-exports Match via from-import
+Match = imdb_kb_enrich.Match
+
+m = Match(tconst="tt001", primary_title="X", original_title="X",
+          title_type="movie", start_year=2020, score=300.0, field="primary",
+          matched_text="X", fuzz_ratio=100.0, num_votes=999,
+          average_rating=7.0, multi_tie=True)
+result = imdb_kb_enrich._apply_vote_tie_breaker([m])
+print("len:", len(result))
+print("top_multi_tie:", result[0].multi_tie)
+PYEOF
+)
+expect_in "16.single-match returns len 1"        'len: 1'                              "$out"
+expect_in "16.single-match flag unchanged"       'top_multi_tie: True'                 "$out"
 
 # ---------------------------------------------------------------- summary --
 echo

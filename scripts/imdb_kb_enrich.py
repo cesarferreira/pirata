@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -43,6 +43,10 @@ from imdb_lookup import IMDbDBUnavailable, Match, Title
 
 IMDB_CONFIDENCE_PCT = 15  # documented; enforcement lives in imdb_lookup.
 AKAS_CAP = 10
+TIE_BREAK_VOTE_RATIO = 10  # plan 008: top.num_votes >= this * runner.num_votes
+                           # demotes multi_tie → resolved (with same-year guard).
+                           # 10× catches Roger Rabbit (1110×) and Mario Galaxy (∞)
+                           # while preserving genuine same-fame ambiguity (<10×).
 DEFAULT_LOG_PATH = REPO_ROOT / "logs" / "sweep_imdb_misses.log"
 DEFAULT_DB = REPO_ROOT / "imdb" / "imdb.db"
 
@@ -89,6 +93,15 @@ def resolve(
         _log_miss(log_path, slug, raw_title, ptt_title, ptt_year, imdb)
         return ResolutionResult(ptt_title, ptt_year, filename, imdb)
 
+    # Plan 008: vote-spread tie-breaker. imdb_lookup's multi_tie heuristic
+    # is purely score-based (15 % gap on tier-1) and ignores numVotes.
+    # Real-world IMDb noise (videoGames, tvEpisodes named after parents)
+    # commonly polls 100×+ less than the famous same-titled film. The
+    # override demotes top.multi_tie when same-year + vote-dominance both
+    # hold, so the resolved path runs and the manifest gains full IMDb
+    # enrichment instead of falling back to PTN-only canonical.
+    matches = _apply_vote_tie_breaker(matches)
+
     if not matches:
         imdb = {
             "lookup_attempted": True,
@@ -128,6 +141,43 @@ def resolve(
     return ResolutionResult(
         title_obj.primary_title, title_obj.start_year, filename, imdb
     )
+
+
+def _apply_vote_tie_breaker(matches: list[Match]) -> list[Match]:
+    """Demote top.multi_tie → False when same-year vote-dominance is overwhelming.
+
+    Plan 008 calibration: imdb_lookup's score-based multi_tie heuristic flags
+    tier-1 ties within 15 % gap regardless of numVotes spread. Real catalogue
+    noise (a 1988 video game named identically to the famous Robert Zemeckis
+    film; zero-vote tvEpisodes named after the parent series) trips that gate
+    even when popularity is asymmetric by 100×+. This Unit-3-layer override
+    inspects the spread and clears top.multi_tie when:
+
+    - len(matches) >= 2, and
+    - matches[0].multi_tie is True, and
+    - matches[0].start_year == matches[1].start_year (same-year guard prevents
+      overriding genuine year-disambiguation cases like Dune 1984 vs 2021), and
+    - matches[0].num_votes >= TIE_BREAK_VOTE_RATIO * max(1, matches[1].num_votes)
+      (max(1, ...) avoids div-by-zero and makes 0-vote runners trivially
+      overridden when top has any non-trivial popularity).
+
+    Returns a new list (input list unchanged). The runner's multi_tie flag is
+    left intact since downstream resolve() only inspects the top.
+
+    Tune TIE_BREAK_VOTE_RATIO at the module-constant level if calibration
+    drifts. Lower = more aggressive override; higher = more conservative.
+    """
+    if len(matches) < 2:
+        return matches
+    top, runner = matches[0], matches[1]
+    if not top.multi_tie:
+        return matches
+    if top.start_year != runner.start_year:
+        return matches
+    runner_votes = max(1, runner.num_votes or 0)
+    if (top.num_votes or 0) < TIE_BREAK_VOTE_RATIO * runner_votes:
+        return matches
+    return [replace(top, multi_tie=False)] + list(matches[1:])
 
 
 def _parse_filename(raw: str) -> dict:
