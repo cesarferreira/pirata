@@ -183,7 +183,8 @@ def run_contact_sheet(video: Path, out_dir: Path, title: str,
 
 def sweep(downloads_root: Path, skip_patterns: list[str],
           dry_run: bool, force: bool,
-          kb_root: Path | None = None) -> dict:
+          kb_root: Path | None = None,
+          ignore_disk_floor: bool = False) -> dict:
     stats = {"done": 0, "skip": 0, "fail": 0}
     for entry in sorted(downloads_root.iterdir()):
         try:
@@ -213,7 +214,7 @@ def sweep(downloads_root: Path, skip_patterns: list[str],
             continue
 
         # Dry-run doesn't write sheets, so disk gating is irrelevant.
-        if not dry_run:
+        if not dry_run and not ignore_disk_floor:
             disk = shutil.disk_usage(downloads_root)
             if disk.free / disk.total < DISK_FREE_FLOOR:
                 log("warn", f"{sanitize(entry.name)} (disk <10% free)")
@@ -265,6 +266,9 @@ def main() -> int:
     ap.add_argument("--kb", action=argparse.BooleanOptionalAction, default=True,
                     help="Also export RAG-ready clean frames + manifests to "
                          "<repo>/kb/ (default on; pass --no-kb to disable)")
+    ap.add_argument("--ignore-disk-floor", action="store_true",
+                    help="Override the 10%% free-disk safety gate. Use only when "
+                         "you know sheet output (~tens of MB) won't OOM the disk.")
     args = ap.parse_args()
 
     downloads_root = args.downloads.resolve() if args.downloads else read_downloads_root()
@@ -293,12 +297,15 @@ def main() -> int:
 
     kb_root = (REPO_ROOT / "kb").resolve() if args.kb else None
     try:
-        log("start",
-            f"downloads={sanitize(downloads_root)} dry_run={args.dry_run} "
-            f"force={args.force} kb={'on' if kb_root else 'off'}")
+        start_detail = (f"downloads={sanitize(downloads_root)} dry_run={args.dry_run} "
+                        f"force={args.force} kb={'on' if kb_root else 'off'}")
+        if args.ignore_disk_floor:
+            start_detail += " ignore_disk_floor=True"
+        log("start", start_detail)
         t0 = time.time()
         stats = sweep(downloads_root, args.skip, args.dry_run, args.force,
-                      kb_root=kb_root)
+                      kb_root=kb_root,
+                      ignore_disk_floor=args.ignore_disk_floor)
         dt = time.time() - t0
         summary = (f"done={stats['done']} skip={stats['skip']} "
                    f"fail={stats['fail']} duration={dt:.0f}s")

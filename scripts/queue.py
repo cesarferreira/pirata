@@ -27,6 +27,32 @@ MAGNET_RE = re.compile(
     r"magnet:\?.*xt=urn:btih:(?:[A-Fa-f0-9]{40}|[A-Za-z2-7]{32})"
 )
 PIRATA_CONFIG = Path.home() / ".config" / "pirata" / "config.toml"
+VIDEO_EXTS = {".mkv", ".mp4", ".avi", ".mov", ".ts", ".m2ts", ".webm"}
+
+
+def snapshot_loose_videos(root: Path) -> set[Path]:
+    """Top-level files in root with video extensions."""
+    if not root.is_dir():
+        return set()
+    return {p for p in root.iterdir()
+            if p.is_file() and p.suffix.lower() in VIDEO_EXTS}
+
+
+def wrap_loose_videos(new_videos: set[Path]) -> list[Path]:
+    """Move each loose video into <stem>/<name>. Skip on collision."""
+    wrapped: list[Path] = []
+    for video in sorted(new_videos):
+        target_dir = video.parent / video.stem
+        if target_dir.exists():
+            print(f"warn: cannot wrap {video.name}; {target_dir.name}/ exists",
+                  file=sys.stderr)
+            continue
+        target_dir.mkdir()
+        new_path = target_dir / video.name
+        video.rename(new_path)
+        print(f"wrapped: {video.name} -> {target_dir.name}/")
+        wrapped.append(new_path)
+    return wrapped
 
 
 def read_default_dir() -> str:
@@ -73,6 +99,9 @@ def main() -> int:
     p.add_argument("--autosheets", action=argparse.BooleanOptionalAction, default=True,
                    help="After --wait completes, sweep downloads/ for new releases and generate "
                         "contact sheets. Ignored when --wait is not set. Default: on.")
+    p.add_argument("--ignore-disk-floor", action="store_true",
+                   help="Propagate --ignore-disk-floor to the autosheets sweep "
+                        "(overrides the 10%% free-disk safety gate).")
     args = p.parse_args()
 
     magnets = collect(args)
@@ -114,13 +143,21 @@ def main() -> int:
         cmd.append("--seed-time=0")
 
     if args.wait:
+        download_path = Path(download_dir)
+        before_loose = snapshot_loose_videos(download_path)
         rc = subprocess.run(cmd).returncode
         os.unlink(tmp_path)
+        if rc == 0:
+            after_loose = snapshot_loose_videos(download_path)
+            wrap_loose_videos(after_loose - before_loose)
         if rc == 0 and args.autosheets:
             sweep = Path(__file__).parent / "sheets_sweep.py"
             if sweep.is_file():
                 print("\nrunning sheets_sweep.py ...")
-                subprocess.run([sys.executable, str(sweep)])
+                sweep_cmd = [sys.executable, str(sweep)]
+                if args.ignore_disk_floor:
+                    sweep_cmd.append("--ignore-disk-floor")
+                subprocess.run(sweep_cmd)
             else:
                 print(f"warning: sweep script missing at {sweep}; skipping autosheets",
                       file=sys.stderr)

@@ -135,6 +135,13 @@ assert "T7b canary file untouched" \
 assert "T8 cache-only contact-sheets/ treated as NOT sheeted" \
   grep -q "dry-run.*Cache.Only.Release" "$LOG"
 
+# Test 10: --ignore-disk-floor is wired through to the start log line
+echo
+echo "=== sweep --dry-run --ignore-disk-floor ==="
+python3 "$SWEEP" --downloads "$DOWNLOADS" --dry-run --ignore-disk-floor 2>/dev/null
+assert "T10 --ignore-disk-floor recorded on start log line" \
+  grep -q "sweep start.*ignore_disk_floor=True" "$LOG"
+
 # Test 4: concurrent sweep — hold the flock explicitly via a background
 # Python helper; then invoke sweep and expect "already running" output.
 # Dry-run is too fast to race without an explicit holder.
