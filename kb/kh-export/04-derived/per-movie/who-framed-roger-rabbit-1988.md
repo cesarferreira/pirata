@@ -1,6 +1,6 @@
 ---
 slug: "who-framed-roger-rabbit-1988"
-title: "Who Framed Roger Rabbit (1988)"
+title: "Who Framed Roger Rabbit"
 year: 1988
 frame_count: 300
 first_tc: "00:00:08:09"
@@ -18,19 +18,25 @@ scdet:
   threshold: 8
   floor_s: 4.0
   target: 300
+tconst: "tt0096438"
+imdb_confidence: 100
+genres: "Adventure, Animation, Comedy"
+rating_average: 7.7
+rating_votes: 233248
+directors: "Robert Zemeckis"
 ---
 
-# Who Framed Roger Rabbit (1988)
+# Who Framed Roger Rabbit
 
 Slug: `who-framed-roger-rabbit-1988`
 
-This is the contact-sheet derivative for the 1988 film Who Framed Roger Rabbit (1988).
+This is the contact-sheet derivative for the 1988 film Who Framed Roger Rabbit.
 It was extracted from a single source video and serves as a
 pipeline-test artifact for the knowledge-hub ingest path.
 
 ## Pipeline metadata
 
-- Title: Who Framed Roger Rabbit (1988)
+- Title: Who Framed Roger Rabbit
 - Year: 1988
 - Frames extracted (manifest): 300
 - First timecode: 00:00:08:09 (8.425 s)
@@ -47,6 +53,14 @@ pipeline-test artifact for the knowledge-hub ingest path.
 - threshold: 8
 - floor_s: 4.0
 - target: 300
+
+## IMDb metadata
+
+- Genres: Adventure, Animation, Comedy
+- Rating: 7.7 (233248 votes)
+- Director: Robert Zemeckis
+- Top cast: Bob Hoskins, Christopher Lloyd, Joanna Cassidy, Charles Fleischer, Charles Fleischer
+- IMDb tconst: tt0096438
 
 ## Caveats
 

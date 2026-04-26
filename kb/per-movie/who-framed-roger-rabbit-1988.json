@@ -1,6 +1,6 @@
 {
   "slug": "who-framed-roger-rabbit-1988",
-  "title": "Who Framed Roger Rabbit (1988)",
+  "title": "Who Framed Roger Rabbit",
   "year": 1988,
   "fps": 23.976,
   "runtime_s": 6227.414,
@@ -12,6 +12,82 @@
     "target": 300
   },
   "extracted_at": "2026-04-24T23:39:03Z",
+  "filename": {
+    "raw_title": "Who Framed Roger Rabbit (1988)",
+    "ptt_title": "Who Framed Roger Rabbit",
+    "ptt_year": 1988
+  },
+  "imdb": {
+    "tconst": "tt0096438",
+    "primaryTitle": "Who Framed Roger Rabbit",
+    "originalTitle": "Who Framed Roger Rabbit",
+    "year": 1988,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ],
+    "rating": {
+      "average": 7.7,
+      "votes": 233248
+    },
+    "director": [
+      {
+        "nconst": "nm0000709",
+        "name": "Robert Zemeckis"
+      }
+    ],
+    "plot": null,
+    "top_cast": [
+      {
+        "nconst": "nm0001364",
+        "name": "Bob Hoskins",
+        "role": null
+      },
+      {
+        "nconst": "nm0000502",
+        "name": "Christopher Lloyd",
+        "role": null
+      },
+      {
+        "nconst": "nm0001026",
+        "name": "Joanna Cassidy",
+        "role": null
+      },
+      {
+        "nconst": "nm0281486",
+        "name": "Charles Fleischer",
+        "role": null
+      },
+      {
+        "nconst": "nm0281486",
+        "name": "Charles Fleischer",
+        "role": null
+      }
+    ],
+    "akas": [
+      {
+        "title": "Who Framed Roger Rabbit",
+        "language": "en"
+      },
+      {
+        "title": "Roger Rabbit",
+        "language": "en"
+      },
+      {
+        "title": "¿Quién engañó a Roger Rabbit?",
+        "language": "es"
+      },
+      {
+        "title": "¿Quién incriminó a Roger Rabbit?",
+        "language": "es"
+      }
+    ],
+    "confidence": 100,
+    "multi_tie": false,
+    "result": "resolved",
+    "lookup_attempted": true
+  },
   "frames": [
     {
       "idx": 1,

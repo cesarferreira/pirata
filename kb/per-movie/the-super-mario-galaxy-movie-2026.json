@@ -18,12 +18,75 @@
     "ptt_year": 2026
   },
   "imdb": {
-    "lookup_attempted": true,
-    "result": "multi_tie",
-    "candidates_considered": 14,
-    "top_score": 100.0,
-    "runner_up_score": 100.0,
-    "multi_tie": true
+    "tconst": "tt28650488",
+    "primaryTitle": "The Super Mario Galaxy Movie",
+    "originalTitle": "The Super Mario Galaxy Movie",
+    "year": 2026,
+    "genres": [
+      "Adventure",
+      "Animation",
+      "Comedy"
+    ],
+    "rating": {
+      "average": 6.4,
+      "votes": 38575
+    },
+    "director": [
+      {
+        "nconst": "nm1739338",
+        "name": "Aaron Horvath"
+      },
+      {
+        "nconst": "nm2398585",
+        "name": "Michael Jelenic"
+      },
+      {
+        "nconst": "nm2966857",
+        "name": "Pierre Leduc"
+      },
+      {
+        "nconst": "nm6042133",
+        "name": "Fabien Polack"
+      }
+    ],
+    "plot": null,
+    "top_cast": [
+      {
+        "nconst": "nm0488953",
+        "name": "Brie Larson",
+        "role": null
+      },
+      {
+        "nconst": "nm18364321",
+        "name": "Virginia Dare Jelenic",
+        "role": null
+      },
+      {
+        "nconst": "nm1509478",
+        "name": "Benny Safdie",
+        "role": null
+      },
+      {
+        "nconst": "nm0724656",
+        "name": "Kevin Michael Richardson",
+        "role": null
+      },
+      {
+        "nconst": "nm0695435",
+        "name": "Chris Pratt",
+        "role": null
+      }
+    ],
+    "akas": [
+      {
+        "title": "The Super Mario Galaxy Movie",
+        "language": "en"
+      }
+    ],
+    "confidence": 100,
+    "multi_tie": false,
+    "result": "resolved",
+    "lookup_attempted": true
   },
   "frames": [
     {

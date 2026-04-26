@@ -18,6 +18,12 @@ scdet:
   threshold: 8
   floor_s: 4.0
   target: 300
+tconst: "tt28650488"
+imdb_confidence: 100
+genres: "Adventure, Animation, Comedy"
+rating_average: 6.4
+rating_votes: 38575
+directors: "Aaron Horvath; Michael Jelenic; Pierre Leduc; Fabien Polack"
 ---
 
 # The Super Mario Galaxy Movie
@@ -48,9 +54,14 @@ pipeline-test artifact for the knowledge-hub ingest path.
 - floor_s: 4.0
 - target: 300
 
+## IMDb metadata
+
+- Genres: Adventure, Animation, Comedy
+- Rating: 6.4 (38575 votes)
+- Director: Aaron Horvath; Michael Jelenic; Pierre Leduc; Fabien Polack
+- Top cast: Brie Larson, Virginia Dare Jelenic, Benny Safdie, Kevin Michael Richardson, Chris Pratt
+- IMDb tconst: tt28650488
+
 ## Caveats
 
-- IMDb resolution returned multi_tie (top_score=100.0,
-  runner_up_score=100.0). Canonical title/year fall back
-  to PTN-cleaned values; tconst is not anchored.
 - Pipeline-test export, not a semantic-recall-complete KB.

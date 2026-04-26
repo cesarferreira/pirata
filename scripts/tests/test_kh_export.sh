@@ -89,8 +89,13 @@ else
   fail "09.per-movie JSON does not parse"
 fi
 
-# Markdown wrapper contains all 4 required literal strings
-for needle in "Roger Rabbit" "Who Framed Roger Rabbit (1988)" "who-framed-roger-rabbit-1988" "scdet"; do
+# Markdown wrapper contains all 4 required literal strings.
+# Plan 008 Unit 2 changed Roger Rabbit's source title from "Who Framed
+# Roger Rabbit (1988)" (filename-based) to "Who Framed Roger Rabbit"
+# (IMDb primaryTitle). The year is still surfaced via the YAML
+# frontmatter (year: 1988); the title literal no longer carries the
+# parens-year suffix.
+for needle in "Roger Rabbit" "Who Framed Roger Rabbit" "who-framed-roger-rabbit-1988" "scdet"; do
   if grep -qF "$needle" "$PER_MOVIE_DST_MD"; then
     pass "10.MD contains literal: $needle"
   else
@@ -132,11 +137,10 @@ if grep -qF "the-super-mario-galaxy-movie-2026" "$MG_DST_MD" 2>/dev/null; then
 else
   fail "11b.Mario Galaxy wrapper missing slug literal"
 fi
-# Post-Unit-3 (plan 007 Unit G): Mario Galaxy per-movie JSON has been
-# regenerated with canonical title="The Super Mario Galaxy Movie",
-# year=2026, and an imdb block (multi_tie outcome). The wrapper now
-# carries the cleaned title/year + a multi_tie caveat instead of the
-# old "title equals slug" + "Year is null" caveats.
+# Post-plan-008 Unit 2: Mario Galaxy per-movie JSON regenerated with
+# resolved IMDb (vote-spread tie-breaker fired on the famous-vs-zero-vote
+# tvEpisode tie). The wrapper now carries canonical title + year +
+# `## IMDb metadata` body section instead of the old multi_tie caveat.
 if grep -qF 'title: "The Super Mario Galaxy Movie"' "$MG_DST_MD" 2>/dev/null; then
   pass "11c.Mario Galaxy wrapper has canonical title (not slug)"
 else
@@ -147,10 +151,28 @@ if grep -qF "year: 2026" "$MG_DST_MD" 2>/dev/null; then
 else
   fail "11d.Mario Galaxy wrapper missing year=2026"
 fi
-if grep -qF "returned multi_tie" "$MG_DST_MD" 2>/dev/null; then
-  pass "11e.Mario Galaxy wrapper notes multi_tie IMDb outcome"
+if grep -qF 'tconst: "tt28650488"' "$MG_DST_MD" 2>/dev/null; then
+  pass "11e.Mario Galaxy wrapper has IMDb tconst"
 else
-  fail "11e.Mario Galaxy wrapper missing multi_tie caveat"
+  fail "11e.Mario Galaxy wrapper missing IMDb tconst"
+fi
+if grep -qF "## IMDb metadata" "$MG_DST_MD" 2>/dev/null; then
+  pass "11f.Mario Galaxy wrapper has IMDb metadata section"
+else
+  fail "11f.Mario Galaxy wrapper missing IMDb metadata section"
+fi
+# Roger Rabbit also resolves post-plan-008 (vote spread 1110× vs the
+# same-name 1988 video game).
+RR_DST_MD="$EXPORT/04-derived/per-movie/who-framed-roger-rabbit-1988.md"
+if grep -qF 'tconst: "tt0096438"' "$RR_DST_MD" 2>/dev/null; then
+  pass "11g.Roger Rabbit wrapper has IMDb tconst"
+else
+  fail "11g.Roger Rabbit wrapper missing IMDb tconst"
+fi
+if grep -qF "Robert Zemeckis" "$RR_DST_MD" 2>/dev/null; then
+  pass "11h.Roger Rabbit wrapper names Robert Zemeckis as director"
+else
+  fail "11h.Roger Rabbit wrapper missing director attribution"
 fi
 
 # README is non-empty
