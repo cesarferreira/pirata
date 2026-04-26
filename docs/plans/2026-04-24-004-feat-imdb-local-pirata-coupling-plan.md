@@ -25,7 +25,7 @@ The architectural bet ("IMDb-primary always-on") is *not* attempted here. Phase 
 
 ## Requirements Trace
 
-- R1-R3 (Data Layer) — SQLite ingest from TSVs with atomic refresh + 25 GB pre-flight gate.
+- R1-R3 (Data Layer) — SQLite ingest from TSVs with atomic refresh + 35 GB pre-flight gate (raised from 25 after Phase 0 measured live DB at ~15 GB; peak refresh ≈ 32-35 GB).
 - R4-R6 (Lookup API) — `lookup_by_title` / `lookup_by_tconst` / `lookup_episodes` Python helper backed by FTS5; 3-tier ranking with locked composite score formula; PT-BR / EN / ES akas slice.
 - R7 / R7b / R7c / R8 (Skill Integration) — TC-primary on happy path, IMDb engages only on TC failure / zero results, `RESOLVED` row in SHORTLIST when IMDb engaged, `[TC OFFLINE]` row when TC fails.
 - R9 / R10 — anime fallback to pirata; music/soft/courses skip IMDb.
@@ -86,7 +86,7 @@ The architectural bet ("IMDb-primary always-on") is *not* attempted here. Phase 
 - **WAL-safe atomic refresh protocol (R3)** — build at `imdb/imdb.db.new`, run `PRAGMA wal_checkpoint(TRUNCATE)` on it, close all connections, then `os.replace('imdb/imdb.db.new', 'imdb/imdb.db')`. Single-file rename is atomic on APFS. **Sibling cleanup:** after successful swap, unlink any orphan `imdb/imdb.db.new-wal` / `imdb/imdb.db.new-shm` siblings (truncate doesn't delete them); also unlink stale `imdb/imdb.db-wal` / `imdb/imdb.db-shm` from any prior live readers since the new inode generates fresh siblings. **Pre-flight cleanup:** at ingest start, unlink any pre-existing `imdb/imdb.db.new*` from a prior killed run before building. **Concurrent reader guard:** `imdb_ingest.py` writes `imdb/.refresh.lock` (flock-style) for the build duration; `imdb_lookup.py` checks for it on every call and returns `IMDbDBUnavailable(reason="refresh_in_flight")` so the skill renders `[IMDB OFFLINE: refresh]` and the event log captures it cleanly. Single-process refresh remains the contract (no concurrent ingests), but the skill can keep running gracefully during refresh — no longer "out of scope".
 - **Filename parser: PTT (`parse-torrent-title`)** — chosen over `guessit` (LGPLv3 + 4 transitive deps; slow maintenance) and custom regex (drift risk, only handles year today). PTT is zero-deps, MIT, mature, and parses title / year / season / episode / quality reliably. Installed as a global pip dep matching the Pillow convention. The `parse_year_from_title` regex at `contact_sheet.py:85-88` stays as a hard-coded simple fallback.
 - **RapidFuzz install: global pip** — matches the existing Pillow convention (also a global install, no `requirements.txt`). Adopting `requirements.txt` or `pyproject.toml` would be a workspace convention change beyond this plan's scope.
-- **Disambiguation composite score formula (locks RBP item #2 from origin doc):** `score = fuzz_ratio_0_to_100 × field_multiplier`, where `fuzz_ratio` is `100` for exact case-insensitive match and `RapidFuzz fuzz.token_set_ratio` for fuzzy match. Field multipliers: `primaryTitle=3.0`, `originalTitle=2.0`, `aka isOriginalTitle=1=1.8`, `aka regional translation=1.5`. `numVotes` desc breaks ties when scores tie within 0.5. Confidence threshold for forced disambiguation: top-1 score within 15 % of runner-up *and* both in tier 1 (exact-match tier).
+- **Disambiguation composite score formula (locks RBP item #2 from origin doc):** `score = fuzz_ratio_0_to_100 × field_multiplier`, where `fuzz_ratio` is `100` for exact case-insensitive match and `RapidFuzz fuzz.WRatio` for fuzzy match (capped at 99 to enforce strict tier separation). Field multipliers: `primaryTitle=3.0`, `originalTitle=2.0`, `aka isOriginalTitle=1=1.8`, `aka regional translation=1.5`. `numVotes` desc breaks ties when scores tie within 0.5. Confidence threshold for forced disambiguation: top-1 score within 15 % of runner-up *and* both in tier 1 (exact-match tier). **Tier 1 always ranks above Tier 2 in the merged sort** (independent of score), so an aka-regional exact match wins over a primaryTitle near-fuzzy. **Deviation from earlier draft (Unit 2 implementation, 2026-04-25):** `fuzz.token_set_ratio` was originally locked but smoke-tested wrong — it returns 100 when query tokens are a *subset* of candidate tokens (e.g., "Dune" → "Dune World" = 100), poisoning the tier-1/tier-2 boundary. Switched to `fuzz.WRatio` (length-aware blend) + explicit tier separation in sort; smoke + 7/7 PT-BR fixture clean.
 - **License scope for KB sync** — knowledge-hub on Dante is single-user, local-only (per workspace identity). IMDb non-commercial license carveout for personal use applies. If `kb/` is ever served beyond Dante (cross-workspace, multi-tenant, or external sync), strip IMDb-derived fields or re-evaluate the license. Recorded as a Scope Boundary so the question doesn't get re-asked silently.
 - **Akas slice: PT + EN + ES (no FR)** — narrowed from earlier brainstorm draft after pass-2 measurement showed the broader predicate captured ~32 M rows (3-4× over original disk-budget estimate). Predicate: `region IN ('BR','PT','ES','MX','AR') OR language IN ('pt','en','es') OR isOriginalTitle = 1`. FR revisited only if a real PT-FR mis-resolution surfaces.
 - **Series cast aggregated at ingest, not sweep time** — R12 series-aggregation runs in `imdb_ingest.py` once and materializes a `series_top_cast(parent_tconst, top_5_nconsts JSON)` table. Sweep enrichment reads it directly; no runtime per-episode joins.
@@ -116,7 +116,7 @@ All Resolve-Before-Phase-1 items resolved during planning (knowledge-hub schema 
 ### Deferred to Implementation
 
 - **FTS5 latency target measurement** — `<50 ms p99` is a Phase 0 success target. Confirmed feasible by external research, but the actual bm25 + RapidFuzz pipeline must be **measured** on the real ingested corpus before Phase 0 is durably done. If not met, planning-time options were already noted (drop trigram tokenizer, narrow akas predicate further); apply during implementation.
-- **Bulk ingest implementation strategy** — `executemany` chunks vs `pandas.to_sql` chunks vs streaming `csv.reader` + chunked transactions. The `<10 min full re-ingest` budget on M-series Mac is the constraint. Decide based on profile during Unit 1.
+- **Bulk ingest implementation strategy** — `executemany` chunks vs `pandas.to_sql` chunks vs streaming `csv.reader` + chunked transactions. **Resolved Phase 0 (2026-04-25):** streaming `csv.reader` + chunked `executemany` (50k batches). Real-corpus wallclock = **16.9 min** on M-series; live DB = **15 GB**. Original `<10 min` budget was aspirational; actuals are the new baseline for refresh UX (acceptable for monthly/quarterly manual refresh).
 - **IMDb DB unavailability detection in skill** — health-probe at skill init vs lazy try/except with cached failure flag. Unit 4 picks based on what's lightest in the skill execution model.
 - **Log rotation policy** — both `logs/sweep_imdb_misses.log` and `logs/skill_imdb_events.jsonl` grow unboundedly. Rotation is deferred until Phase 2 evaluation; for Phase 1, the STATUS / DOCTOR read-back tolerates whole-file scans.
 - **DOCTOR's age-check input** — `imdb/state.json.last_refresh_ts` (tracked, may exist without DB) vs `mtime(imdb/imdb.db)` (absent if DB never built). Default: prefer `state.json.last_refresh_ts` if present, fall back to `mtime`, FAIL if neither.
@@ -204,9 +204,9 @@ The diagram shows the *flow* of the system. Boundary points to validate during r
 
 ## Implementation Units
 
-- [ ] **Unit 1: `scripts/imdb_ingest.py` — TSV → SQLite ingest with FTS5 + WAL-safe atomic refresh**
+- [x] **Unit 1: `scripts/imdb_ingest.py` — TSV → SQLite ingest with FTS5 + WAL-safe atomic refresh** _(shipped 2026-04-25, commit fb4b4a4; real-corpus verified 16.9 min wallclock, 15 GB DB, integrity_check ok, all 10 tables populated)_
 
-  **Goal:** A `--refresh` script that downloads fresh IMDb TSVs, builds `imdb/imdb.db` (new) with all required tables + FTS5 + materialized `series_top_cast`, runs `PRAGMA integrity_check`, and atomically replaces the live DB. Backed by a 25 GB pre-flight free-space gate and one-generation rollback at `imdb/imdb.db.prev`.
+  **Goal:** A `--refresh` script that downloads fresh IMDb TSVs, builds `imdb/imdb.db` (new) with all required tables + FTS5 + materialized `series_top_cast`, runs `PRAGMA integrity_check`, and atomically replaces the live DB. Backed by a 35 GB pre-flight free-space gate and one-generation rollback at `imdb/imdb.db.prev`.
 
   **Requirements:** R1, R2, R3, R16 (write `imdb/state.json` after success).
 
@@ -224,7 +224,7 @@ The diagram shows the *flow* of the system. Boundary points to validate during r
   - Tables: `title_basics`, `title_ratings`, `title_episode`, `title_crew`, `title_principals_top5` (filtered streaming top-5-per-tconst by `ordering`, asserts input is sorted by tconst else aborts loudly), `title_akas` (with the 3-language predicate from Key Decisions), `series_top_cast` (materialized once after `title_episode` + `title_principals_top5` are loaded).
   - FTS5 virtual table populated last from a JOIN: `INSERT INTO ft_titles(title, title_source, tconst) SELECT primaryTitle, 'primary', tconst FROM title_basics UNION ALL ... originalTitle, 'original' ... UNION ALL ... title, 'aka' FROM title_akas`. Single bulk insert.
   - Indexes on `(tconst)` for `title_basics`, `(tconst)` for `title_ratings`, `(parent_tconst)` for `title_episode`, `(parent_tconst)` for `series_top_cast`.
-  - Pre-flight: `shutil.disk_usage(imdb_dir)` >= 25 GB free; otherwise abort with a printed reason.
+  - Pre-flight: `shutil.disk_usage(imdb_dir)` >= 35 GB free; otherwise abort with a printed reason.
   - Refresh sequence: download → build `imdb/imdb.db.new` → integrity_check → checkpoint → swap → write `imdb/state.json{last_refresh_ts, source_checksums, schema_version}` → optionally archive previous `imdb/imdb.db.prev`.
   - Reuse the sys.path prefix-drop guard from `contact_sheet.py:21-22` (necessary even though this script doesn't import `queue` directly — defensive habit per the workspace pattern).
 
@@ -240,10 +240,10 @@ The diagram shows the *flow* of the system. Boundary points to validate during r
   - **Happy path:** Same as above; assert `series_top_cast` table contains pre-computed rows for fixture series (one or two parent_tconsts).
   - **Edge case:** TSV has `\N` in a NULL slot → assert it's stored as `NULL` in SQLite, not the literal string `\N`.
   - **Edge case:** Akas filter test — fixture includes rows in regions {BR, PT, US, GB, ES, MX, AR, FR} and languages {pt, en, es, fr, de, ja}. Assert FR/DE/JA rows are dropped unless tagged `isOriginalTitle=1`.
-  - **Error path:** Disk pre-flight — mock < 25 GB free → assert ingest exits non-zero with a "needs 25 GB free" message.
+  - **Error path:** Disk pre-flight — mock < 35 GB free → assert ingest exits non-zero with a "needs 35 GB free" message.
   - **Error path:** principals sort assumption — fixture includes interleaved tconsts (`tt001, tt002, tt001, tt003`) → assert ingest aborts loudly with a sort-violation message rather than silently miss the second tt001 batch.
   - **Error path:** integrity_check fails — corrupt the `.new` DB after build (write garbage) → assert refresh refuses to swap and live DB at `imdb/imdb.db` is unchanged.
-  - **Integration:** Full refresh of a 100-title fixture → measure wallclock < 30 s (proxy for the <10 min real-corpus target); the test does not enforce real-corpus timing but flags 10×+ regressions.
+  - **Integration:** Full refresh of a 100-title fixture → measure wallclock < 30 s (proxy for the ~17 min real-corpus measured baseline); the test does not enforce real-corpus timing but flags 10×+ regressions.
   - **Integration:** Run twice in succession → assert `imdb/imdb.db.prev` exists after second run with the contents from the first run.
 
   **Verification:**
@@ -251,7 +251,7 @@ The diagram shows the *flow* of the system. Boundary points to validate during r
   - `sqlite3 imdb/imdb.db 'PRAGMA integrity_check'` returns `ok`.
   - `imdb/state.json` parses and contains all three fields.
 
-- [ ] **Unit 2: `scripts/imdb_lookup.py` — Python helper module backed by FTS5 + RapidFuzz**
+- [x] **Unit 2: `scripts/imdb_lookup.py` — Python helper module backed by FTS5 + RapidFuzz** _(shipped 2026-04-25; smoke 25/25 PASS, fixture 7/7, p99=4ms; deviations from plan: `fuzz.WRatio` instead of `token_set_ratio` + explicit tier separation in sort)_
 
   **Goal:** Expose `lookup_by_title(query, year=None, kind=None) -> list[Match]`, `lookup_by_tconst(tconst) -> Title | None`, `lookup_episodes(parent_tconst, season=None) -> list[Episode]` with locked composite score formula and 3-tier ranking. Hits <50 ms p99 on the real corpus.
 
@@ -266,7 +266,7 @@ The diagram shows the *flow* of the system. Boundary points to validate during r
   **Approach:**
   - Module-level connection cache (open once, reuse across calls within a process; close at exit). Connect read-only via `sqlite3.connect(f'file:{db_path}?mode=ro', uri=True)`.
   - Tier 1 (exact match): `SELECT tconst, title, title_source FROM ft_titles WHERE title = ? COLLATE NOCASE` — direct equality, no FTS5 query needed for this tier.
-  - Tier 2 (fuzzy match): FTS5 `MATCH` with prefix syntax → top-N candidates → RapidFuzz `process.extract` post-pass with `scorer=fuzz.token_set_ratio, limit=10, score_cutoff=70`.
+  - Tier 2 (fuzzy match): FTS5 `MATCH` with implicit-AND tokens + prefix on last token → top-N (200) candidates → RapidFuzz post-pass with `fuzz.WRatio` (capped at 99) and `score_cutoff=70`. **WRatio chosen over token_set_ratio** because token_set_ratio returns 100 on token-subset overlap, breaking tier separation; verified via Unit 2 smoke.
   - Apply `year` filter (±0 default) and `titleType` filter to candidates.
   - Composite score per Key Decisions: `score = fuzz_ratio × field_multiplier`. `numVotes` desc breaks ties within 0.5 score range.
   - Confidence threshold: if top-1 score within 15 % of runner-up *and* both in tier 1, return both as a multi-tie (caller raises a disambiguation prompt; never silent auto-pick).
@@ -513,7 +513,7 @@ The diagram shows the *flow* of the system. Boundary points to validate during r
 |---|---|
 | WAL atomic refresh implemented incorrectly → DB corruption for readers | Single-process refresh contract; `wal_checkpoint(TRUNCATE)` before swap; integrity check before swap; rollback DB at `imdb/imdb.db.prev`; documented in `imdb/README.md`. |
 | FTS5 latency target <50 ms p99 not met on real corpus | Phase 0 gate measures it before Phase 1 starts. If missed, fall back options pre-identified: drop trigram tokenizer (use unicode61 only — already chosen), narrow akas predicate further (drop ES if needed), revisit FTS5 column weighting. |
-| RapidFuzz `token_set_ratio` produces wrong-tconst poisoning on edge cases | R5 confidence threshold forces text disambiguation when score is below threshold; R7c `RESOLVED` row in SHORTLIST gives user visibility; 20-item PT-BR fixture in Unit 2 catches the obvious cases before Phase 1 sweep runs. |
+| RapidFuzz fuzzy scorer produces wrong-tconst poisoning on edge cases | R5 confidence threshold forces text disambiguation when score is below threshold; R7c `RESOLVED` row in SHORTLIST gives user visibility; 20-item PT-BR fixture in Unit 2 catches the obvious cases before Phase 1 sweep runs. **Realized at Unit 2 smoke:** `token_set_ratio` had an additional subset-equals-100 failure mode unrelated to edge cases; switched to `fuzz.WRatio` + tier separation. The remaining "same-primary-title clash" gap (e.g., obscure 2023 'Cidade de Deus' outranking 2002 famous one without year arg) is by-formula and surfaces correctly via multi_tie + year-disambig escape hatch. |
 | 30-day measurement gate produces ambiguous data (2-10 % zone) | Default closed per origin doc Key Decisions; burden of proof on reopening, not on closing. `pirata_evaluate.py` outputs explicit verdict to remove human bias. |
 | IMDb dump URL changes / TSV schema drifts | Schema version field in `imdb/state.json` + ingest aborts loudly on column-count mismatch. Future work: schema-version assertion. |
 | KB JSONs accidentally synced beyond Dante via knowledge-hub (license breach) | Documented as a Scope Boundary; addressed by `imdb/README.md` license note. If knowledge-hub ever serves cross-workspace, IMDb-derived fields must be stripped. |

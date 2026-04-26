@@ -23,7 +23,7 @@ Indexes:
 
 Refresh protocol (R3, WAL-safe):
 1. Acquire imdb/.refresh.lock (flock); abort if another refresh runs.
-2. Pre-flight: <25 GB free → abort. Cleanup any stale imdb/imdb.db.new*
+2. Pre-flight: <35 GB free → abort. Cleanup any stale imdb/imdb.db.new*
    from a prior killed run.
 3. Build at imdb/imdb.db.new (WAL pragmas tuned for bulk load).
 4. PRAGMA integrity_check; abort + leave live DB intact on failure.
@@ -80,7 +80,7 @@ DEFAULT_LOCK = REPO_ROOT / "imdb" / ".refresh.lock"
 DEFAULT_STATE = REPO_ROOT / "imdb" / "state.json"
 
 SCHEMA_VERSION = 1
-DISK_FREE_FLOOR_GB = 25
+DISK_FREE_FLOOR_GB = 35  # Raised from 25 after Phase 0 measured the live DB at ~15 GB; peak refresh = old + new + WAL ≈ 32-35 GB.
 BATCH_SIZE = 50_000
 
 # Akas filter predicate per Key Decisions: PT/EN/ES coverage only.

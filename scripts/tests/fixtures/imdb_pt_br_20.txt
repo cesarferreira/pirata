@@ -1,0 +1,17 @@
+# PT-BR fixture for /pirata IMDb lookup validation (Phase 1 R5 calibration).
+# Format: title<TAB>year<TAB>kind<TAB>expected_tconst   # comment
+# Empty cell = "-" (None at lookup time). One title per line.
+#
+# Goal: top-1 lookup_by_title(title, year, kind) resolves to expected tconst
+# with fuzz_ratio >= 80. Failures drive (a) RapidFuzz cutoff calibration,
+# (b) revisits to the locked composite-score formula, (c) plan revisions.
+#
+# Seeded with 7 of 20 (named in plan); user picks 13 more.
+Cidade de Deus	2002	movie	tt0317248	# original→en, PT in originalTitle
+Tropa de Elite	2007	movie	tt0861739	# original→en, PT in originalTitle
+Bacurau	2019	movie	tt2762506	# primary same in PT/EN
+Oppenheimer	2023	movie	tt15398776	# primary same in PT/EN
+Interestelar	2014	movie	tt0816692	# PT-BR aka of Interstellar
+Ainda Estou Aqui	2024	movie	tt14961016	# original→en, PT in originalTitle
+Dune: Part Two	2024	movie	tt15239678	# canonical EN title
+# TODO (user): add 13 more — mix of {primary-PT, original-PT, aka-only PT-BR}
