@@ -200,6 +200,16 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
     json_frame_count = len(json_frames) if isinstance(json_frames, list) else None
     scdet = json_data.get("scdet") or {}
 
+    # IMDb enrichment block (added by Unit B of plan 007). Only the
+    # resolved case renders IMDb fields in the wrapper; multi_tie /
+    # no_match / db_unavailable / missing-block cases keep the bare
+    # wrapper shape so retrieval surface isn't polluted with negative
+    # signals.
+    imdb_block = json_data.get("imdb") if has_json else None
+    imdb_resolved = (
+        isinstance(imdb_block, dict) and imdb_block.get("result") == "resolved"
+    )
+
     title_is_slug = title == slug
     year_missing = year is None
 
@@ -227,6 +237,20 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
             f"  threshold: {yaml_scalar(scdet.get('threshold'))}",
             f"  floor_s: {yaml_scalar(scdet.get('floor_s'))}",
             f"  target: {yaml_scalar(scdet.get('target'))}",
+        ]
+    if imdb_resolved:
+        rating = imdb_block.get("rating") or {}
+        directors = imdb_block.get("director") or []
+        director_names = "; ".join(d.get("name", "") for d in directors if d.get("name"))
+        genres_list = imdb_block.get("genres") or []
+        genres_str = ", ".join(genres_list)
+        fm += [
+            f"tconst: {yaml_scalar(imdb_block.get('tconst'))}",
+            f"imdb_confidence: {yaml_scalar(imdb_block.get('confidence'))}",
+            f"genres: {yaml_scalar(genres_str)}",
+            f"rating_average: {yaml_scalar(rating.get('average'))}",
+            f"rating_votes: {yaml_scalar(rating.get('votes'))}",
+            f"directors: {yaml_scalar(director_names)}",
         ]
     fm += ["---", ""]
 
@@ -268,24 +292,63 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
         body.append(f"- target: {scdet.get('target')}")
         body.append("")
 
+    if imdb_resolved:
+        original_title = imdb_block.get("originalTitle")
+        rating = imdb_block.get("rating") or {}
+        directors = imdb_block.get("director") or []
+        genres_list = imdb_block.get("genres") or []
+        top_cast = imdb_block.get("top_cast") or []
+        body.append("## IMDb metadata")
+        body.append("")
+        if original_title and original_title != title:
+            body.append(f"- Original title: {original_title}")
+        if genres_list:
+            body.append(f"- Genres: {', '.join(genres_list)}")
+        if rating.get("average") is not None:
+            avg = rating.get("average")
+            votes = rating.get("votes") or 0
+            body.append(f"- Rating: {avg} ({votes} votes)")
+        if directors:
+            names = "; ".join(d.get("name", "") for d in directors if d.get("name"))
+            if names:
+                body.append(f"- Director: {names}")
+        if top_cast:
+            cast_names = ", ".join(c.get("name", "") for c in top_cast[:5] if c.get("name"))
+            if cast_names:
+                body.append(f"- Top cast: {cast_names}")
+        body.append(f"- IMDb tconst: {imdb_block.get('tconst')}")
+        body.append("")
+
     body.append("## Caveats")
     body.append("")
     if not has_json:
         body.append(f"- No per-movie JSON exists at `kb/per-movie/{slug}.json`.")
         body.append("  Wrapper is limited to manifest-derived fields. Re-run")
         body.append("  `scripts/contact_sheet.py` for this release to generate it.")
-    if title_is_slug:
-        body.append(f"- Title `{title}` matches the slug — the filename parser")
-        body.append("  did not extract a human title. Unit 3 (IMDb enrichment)")
-        body.append("  resolves this with `tconst`-anchored fields.")
-    if year_missing:
-        body.append("- Year is null — likely a parser miss on a dot-separated")
-        body.append("  release filename. Unit 3 enrichment will populate this")
-        body.append("  from IMDb.")
-    body.append("- This wrapper predates Unit 3 (KB enrichment in the IMDb x")
-    body.append("  pirata coupling plan). IMDb fields (tconst, rating, top_cast,")
-    body.append("  akas, genres, director, plot) are NOT populated. Regenerate")
-    body.append("  this export after Unit 3 ships.")
+    if has_json and not imdb_resolved:
+        if title_is_slug:
+            body.append(f"- Title `{title}` matches the slug — the filename parser")
+            body.append("  did not extract a human title. Re-run `contact_sheet.py")
+            body.append("  --kb-imdb` to attempt IMDb resolution; the source per-")
+            body.append("  movie JSON predates Unit 3 enrichment.")
+        if year_missing:
+            body.append("- Year is null — likely a parser miss on a dot-separated")
+            body.append("  release filename. Re-run with `--kb-imdb` to populate")
+            body.append("  from IMDb where possible.")
+        if isinstance(imdb_block, dict):
+            reason = imdb_block.get("result")
+            if reason == "multi_tie":
+                top_score = imdb_block.get("top_score")
+                runner = imdb_block.get("runner_up_score")
+                body.append(f"- IMDb resolution returned multi_tie (top_score={top_score},")
+                body.append(f"  runner_up_score={runner}). Canonical title/year fall back")
+                body.append("  to PTN-cleaned values; tconst is not anchored.")
+            elif reason == "no_match":
+                body.append("- IMDb resolution returned no_match. Title may be too")
+                body.append("  obscure for the local catalog or pre-release.")
+            elif reason == "db_unavailable":
+                body.append("- IMDb DB was unavailable at resolve time (refresh-in-")
+                body.append("  flight or missing). Re-run after the refresh completes.")
     body.append("- Pipeline-test export, not a semantic-recall-complete KB.")
     body.append("")
 
@@ -325,14 +388,14 @@ A markdown wrapper exists for every slug in `kb/manifest.jsonl`, even when
 the per-movie JSON is missing or has degraded metadata. The wrapper makes
 the gap explicit so KH retrievers do not silently miss a slug.
 
-## Mario Galaxy caveat (current state)
+## Mario Galaxy caveat (transition state)
 
-`the-super-mario-galaxy-movie-2026` has a per-movie JSON at
-`kb/per-movie/the-super-mario-galaxy-movie-2026.json`, but its `title` field
-matches the slug and its `year` is null. This is a `contact_sheet.py`
-filename-parser miss against dot-separated release-dir names — not a KH
-issue. The wrapper carries this caveat explicitly. Unit 3 (IMDb x pirata
-coupling) resolves it via `tconst`-anchored enrichment.
+Until `scripts/contact_sheet.py --kb-imdb` is re-run for the Mario Galaxy
+release, `kb/per-movie/the-super-mario-galaxy-movie-2026.json` retains the
+pre-Unit-3 shape (title matches the slug, year is null). The wrapper
+preserves the existing caveat. After regeneration, the canonical title +
+year come from IMDb resolution and the wrapper carries the `## IMDb
+metadata` section instead.
 
 ## Regeneration
 
@@ -345,20 +408,22 @@ output. The build is staged in `kb/kh-export.tmp/` and atomically swapped
 over `kb/kh-export/` only after success, so partial failures never leave
 the export in a broken state.
 
-## Unit 3 dependency
+## Unit 3 (KB enrichment)
 
-The current per-movie wrappers contain only pipeline metadata (title, year,
-fps, frame count, scdet config) plus manifest-derived timecodes. Once Unit 3
-(KB enrichment in `scripts/contact_sheet.py`) ships, the per-movie JSONs
-will include IMDb fields (tconst, rating, top_cast, akas, genres, director,
-plot). After Unit 3, regenerate this export to expose those fields to kh.
+Unit 3 of plan 004 (the IMDb x pirata coupling) shipped 2026-04-26 across
+plan 007's sub-units A-G. When a per-movie JSON has an `imdb` block with
+`result == "resolved"`, the wrapper surfaces the IMDb fields (tconst,
+genres, rating, directors, top cast) in YAML frontmatter and a `## IMDb
+metadata` body section. When `result` is `multi_tie`, `no_match`, or
+`db_unavailable`, the wrapper omits the IMDb section so retrieval surface
+isn't polluted with negative signals; the caveat block records the failure
+reason instead.
 
 ## License
 
-The IMDb non-commercial license applies to any IMDb-derived fields, once
-Unit 3 populates them. For v1 (pre-Unit-3), no IMDb data is present and
-the license is moot. The kh has no license metadata field convention; this
-constraint is documented here rather than encoded in metadata.
+The IMDb non-commercial license applies to any IMDb-derived fields surfaced
+by Unit 3. The kh has no license metadata field convention; this constraint
+is documented here rather than encoded in metadata.
 
 If `kh` is ever served beyond Vidigal's local Dante machine (cross-workspace
 sync, multi-tenant), the IMDb-derived fields must be stripped from this

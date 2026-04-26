@@ -41,6 +41,22 @@ PASS=0
 FAIL=0
 pass() { PASS=$((PASS+1)); echo "PASS: $*"; }
 fail() { FAIL=$((FAIL+1)); echo "FAIL: $*"; }
+expect_in() {
+  local label="$1" needle="$2" haystack="$3"
+  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+    pass "$label"
+  else
+    fail "$label  (missing: $needle)"
+  fi
+}
+expect_not_in() {
+  local label="$1" needle="$2" haystack="$3"
+  if printf '%s' "$haystack" | grep -qF -- "$needle"; then
+    fail "$label  (unexpected: $needle)"
+  else
+    pass "$label"
+  fi
+}
 
 # Capture pre-run checksum of the canonical jsonl (must remain unchanged).
 ORIG_JSONL_SHA=$(shasum -a 256 "$MANIFEST_SRC" | awk '{print $1}')
@@ -197,6 +213,202 @@ if [ -f "$SCRATCH/x/04-derived/manifest.json" ]; then
   pass "22.custom --out produced manifest.json"
 else
   fail "22.custom --out missing manifest.json"
+fi
+
+# ----------------------------------------------------------------- run 5 ---
+# Wrapper IMDb-resolved rendering (plan 007 Unit C).
+# Drive build_slug_md directly with synthetic per-movie JSON shapes so we
+# don't need to touch the live kb/. Hermetic tmpdir for the synthetic JSON.
+echo "=== run 5: wrapper IMDb-resolved rendering ==="
+SYN_TMP=$(mktemp -d)
+trap "rm -rf $SYN_TMP" EXIT
+
+# 5a — resolved: full imdb block surfaces in YAML + body.
+RESOLVED_JSON="$SYN_TMP/test-resolved.json"
+cat > "$RESOLVED_JSON" <<'EOF'
+{
+  "slug": "test-resolved",
+  "title": "Bacurau",
+  "year": 2019,
+  "fps": 23.976,
+  "runtime_s": 6678.0,
+  "source_size_bytes": 12345678,
+  "scdet": {"threshold": 8, "floor_s": 4.0, "target": 300},
+  "extracted_at": "2026-04-26T16:00:00Z",
+  "filename": {"raw_title": "Bacurau.2019.1080p.BluRay.x265", "ptt_title": "Bacurau", "ptt_year": 2019},
+  "imdb": {
+    "tconst": "tt2762506",
+    "primaryTitle": "Bacurau",
+    "originalTitle": "Bacurau",
+    "year": 2019,
+    "genres": ["Drama", "Thriller", "Western"],
+    "rating": {"average": 7.3, "votes": 34690},
+    "director": [
+      {"nconst": "nm9999", "name": "Juliano Dornelles"},
+      {"nconst": "nm8888", "name": "Kleber Mendonça Filho"}
+    ],
+    "plot": null,
+    "top_cast": [
+      {"nconst": "nm1", "name": "Sônia Braga", "role": null},
+      {"nconst": "nm2", "name": "Udo Kier", "role": null}
+    ],
+    "akas": [{"title": "Bacurau", "language": "pt"}],
+    "confidence": 100,
+    "multi_tie": false,
+    "result": "resolved",
+    "lookup_attempted": true
+  },
+  "frames": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}],
+  "sheets": []
+}
+EOF
+out=$(python3 - "$RESOLVED_JSON" <<'PYEOF'
+import json, sys
+sys.path.insert(0, "scripts")
+import build_kh_export
+js = json.loads(open(sys.argv[1]).read())
+group = {"title": js["title"], "year": js["year"],
+         "rows": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}]}
+print(build_kh_export.build_slug_md("test-resolved", group, type("P",(object,),{"is_file":lambda self:True,"read_text":lambda self,encoding=None:open(sys.argv[1]).read()})()))
+PYEOF
+)
+expect_in "23a.resolved YAML has tconst"          'tconst: tt2762506'                "$out"
+expect_in "23b.resolved YAML has imdb_confidence" 'imdb_confidence: 100'             "$out"
+expect_in "23c.resolved YAML has rating_average"  'rating_average: 7.3'              "$out"
+expect_in "23d.resolved YAML has rating_votes"    'rating_votes: 34690'              "$out"
+expect_in "23e.resolved YAML has genres"          'genres: "Drama, Thriller, Western"' "$out"
+expect_in "23f.resolved YAML has directors"       'Juliano Dornelles; Kleber'        "$out"
+expect_in "23g.resolved body has IMDb section"    '## IMDb metadata'                 "$out"
+expect_in "23h.resolved body has director"        '- Director: Juliano Dornelles'    "$out"
+expect_in "23i.resolved body has top cast"        '- Top cast: Sônia Braga, Udo Kier' "$out"
+expect_in "23j.resolved body has tconst"          '- IMDb tconst: tt2762506'         "$out"
+# Resolved suppresses the title-equals-slug + year-missing caveats.
+expect_not_in "23k.resolved no slug-mismatch caveat" 'matches the slug'              "$out"
+expect_not_in "23l.resolved no Unit-3-pending caveat" 'predates Unit 3'              "$out"
+
+# 5b — bare manifest (no imdb block): wrapper renders historical shape.
+BARE_JSON="$SYN_TMP/test-bare.json"
+cat > "$BARE_JSON" <<'EOF'
+{
+  "slug": "test-bare",
+  "title": "Test Bare Movie",
+  "year": 2020,
+  "fps": 24.0,
+  "runtime_s": 5400.0,
+  "source_size_bytes": 100,
+  "scdet": {"threshold": 8, "floor_s": 4.0, "target": 300},
+  "extracted_at": "2026-04-26T16:00:00Z",
+  "frames": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}],
+  "sheets": []
+}
+EOF
+out=$(python3 - "$BARE_JSON" <<'PYEOF'
+import json, sys
+sys.path.insert(0, "scripts")
+import build_kh_export
+group = {"title": "Test Bare Movie", "year": 2020,
+         "rows": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}]}
+print(build_kh_export.build_slug_md("test-bare", group, type("P",(object,),{"is_file":lambda self:True,"read_text":lambda self,encoding=None:open(sys.argv[1]).read()})()))
+PYEOF
+)
+expect_not_in "24a.bare YAML has no tconst"        'tconst:'                          "$out"
+expect_not_in "24b.bare YAML has no imdb_confidence" 'imdb_confidence:'               "$out"
+expect_not_in "24c.bare body has no IMDb section" '## IMDb metadata'                 "$out"
+
+# 5c — multi_tie: wrapper bare in IMDb section, caveat references reason.
+MT_JSON="$SYN_TMP/test-multitie.json"
+cat > "$MT_JSON" <<'EOF'
+{
+  "slug": "test-multitie",
+  "title": "Generic Movie",
+  "year": 2021,
+  "fps": 24.0,
+  "runtime_s": 5400.0,
+  "source_size_bytes": 100,
+  "scdet": {"threshold": 8, "floor_s": 4.0, "target": 300},
+  "extracted_at": "2026-04-26T16:00:00Z",
+  "imdb": {
+    "lookup_attempted": true,
+    "result": "multi_tie",
+    "candidates_considered": 4,
+    "top_score": 100.0,
+    "runner_up_score": 100.0,
+    "multi_tie": true
+  },
+  "frames": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}],
+  "sheets": []
+}
+EOF
+out=$(python3 - "$MT_JSON" <<'PYEOF'
+import json, sys
+sys.path.insert(0, "scripts")
+import build_kh_export
+group = {"title": "Generic Movie", "year": 2021,
+         "rows": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}]}
+print(build_kh_export.build_slug_md("test-multitie", group, type("P",(object,),{"is_file":lambda self:True,"read_text":lambda self,encoding=None:open(sys.argv[1]).read()})()))
+PYEOF
+)
+expect_not_in "25a.multi_tie no IMDb section"     '## IMDb metadata'                 "$out"
+expect_not_in "25b.multi_tie no tconst YAML"      'tconst:'                          "$out"
+expect_in     "25c.multi_tie caveat surfaces"     'returned multi_tie'               "$out"
+
+# 5d — db_unavailable: wrapper bare, caveat names reason.
+DBNA_JSON="$SYN_TMP/test-dbna.json"
+cat > "$DBNA_JSON" <<'EOF'
+{
+  "slug": "test-dbna",
+  "title": "Some Movie",
+  "year": 2022,
+  "fps": 24.0,
+  "runtime_s": 5400.0,
+  "source_size_bytes": 100,
+  "scdet": {"threshold": 8, "floor_s": 4.0, "target": 300},
+  "extracted_at": "2026-04-26T16:00:00Z",
+  "imdb": {
+    "lookup_attempted": false,
+    "result": "db_unavailable",
+    "candidates_considered": 0
+  },
+  "frames": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}],
+  "sheets": []
+}
+EOF
+out=$(python3 - "$DBNA_JSON" <<'PYEOF'
+import json, sys
+sys.path.insert(0, "scripts")
+import build_kh_export
+group = {"title": "Some Movie", "year": 2022,
+         "rows": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}]}
+print(build_kh_export.build_slug_md("test-dbna", group, type("P",(object,),{"is_file":lambda self:True,"read_text":lambda self,encoding=None:open(sys.argv[1]).read()})()))
+PYEOF
+)
+expect_not_in "26a.db_unavailable no IMDb section" '## IMDb metadata'                 "$out"
+expect_in     "26b.db_unavailable caveat surfaces" 'IMDb DB was unavailable'         "$out"
+
+# 5e — determinism: two consecutive renders of the resolved fixture must
+# be byte-identical (regression guard for the new branches).
+out1=$(python3 - "$RESOLVED_JSON" <<'PYEOF'
+import json, sys
+sys.path.insert(0, "scripts")
+import build_kh_export
+group = {"title": "Bacurau", "year": 2019,
+         "rows": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}]}
+print(build_kh_export.build_slug_md("test-resolved", group, type("P",(object,),{"is_file":lambda self:True,"read_text":lambda self,encoding=None:open(sys.argv[1]).read()})()))
+PYEOF
+)
+out2=$(python3 - "$RESOLVED_JSON" <<'PYEOF'
+import json, sys
+sys.path.insert(0, "scripts")
+import build_kh_export
+group = {"title": "Bacurau", "year": 2019,
+         "rows": [{"idx": 1, "tc": "00:00:01:00", "t_s": 1.0}]}
+print(build_kh_export.build_slug_md("test-resolved", group, type("P",(object,),{"is_file":lambda self:True,"read_text":lambda self,encoding=None:open(sys.argv[1]).read()})()))
+PYEOF
+)
+if [ "$out1" = "$out2" ]; then
+  pass "27.determinism: two renders byte-identical"
+else
+  fail "27.determinism: render drift detected"
 fi
 
 # ----------------------------------------------------------------- summary ---
