@@ -247,7 +247,8 @@ def export_kb(kb_root: Path, slug: str, title: str,
               mkv: Path, fps: float,
               threshold: int, floor: float, target: int,
               cols: int, rows: int,
-              header_font_size: int, force: bool) -> bool:
+              header_font_size: int, force: bool,
+              kb_imdb: bool = True) -> bool:
     """Export RAG-ready artifacts to <kb_root>/. Frames are pristine JPEGs;
     sheets are the labeled tile re-encoded as JPEG q=90 (lighter than the
     PNG that lives in release/contact-sheets/). Returns True if exported,
@@ -279,11 +280,38 @@ def export_kb(kb_root: Path, slug: str, title: str,
 
     # 3. Build per-movie manifest.
     runtime = probe_duration(mkv)
-    year = parse_year_from_title(title)
     try:
         size_bytes = mkv.stat().st_size
     except OSError:
         size_bytes = 0
+
+    # IMDb resolution: when kb_imdb is on, resolve title/year/metadata
+    # via the local IMDb catalog. Top-level manifest title/year become
+    # the canonical values when imdb.result == resolved; original
+    # filename trace lives under filename.{raw_title, ptt_title, ptt_year}
+    # for debuggability. On any IMDb miss (no_match, multi_tie,
+    # db_unavailable), canonical falls back to PTN-cleaned values so
+    # the slug-shaped-title bug still gets cleaned up at the parser
+    # level even when full IMDb resolution doesn't lock onto a tconst.
+    filename_block = None
+    imdb_block = None
+    if kb_imdb:
+        try:
+            from imdb_kb_enrich import resolve as imdb_resolve
+            res = imdb_resolve(title, slug=slug)
+            manifest_title = res.canonical_title
+            manifest_year = res.canonical_year
+            filename_block = res.filename
+            imdb_block = res.imdb
+            print(f"[kb-imdb] {slug}: result={imdb_block.get('result')} "
+                  f"canonical={manifest_title!r} year={manifest_year}", flush=True)
+        except ImportError as e:
+            print(f"[kb-imdb] disabled (PTN missing): {e}", flush=True)
+            manifest_title = title
+            manifest_year = parse_year_from_title(title)
+    else:
+        manifest_title = title
+        manifest_year = parse_year_from_title(title)
 
     per = cols * rows
     frames_meta = []
@@ -312,17 +340,21 @@ def export_kb(kb_root: Path, slug: str, title: str,
 
     manifest = {
         "slug": slug,
-        "title": title,
-        "year": year,
+        "title": manifest_title,
+        "year": manifest_year,
         "fps": round(fps, 3),
         "runtime_s": round(runtime, 3),
         "source_file": str(mkv),
         "source_size_bytes": size_bytes,
         "scdet": {"threshold": threshold, "floor_s": floor, "target": target},
         "extracted_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "frames": frames_meta,
-        "sheets": sheets_meta,
     }
+    if filename_block is not None:
+        manifest["filename"] = filename_block
+    if imdb_block is not None:
+        manifest["imdb"] = imdb_block
+    manifest["frames"] = frames_meta
+    manifest["sheets"] = sheets_meta
 
     # 4. Atomic write of per-movie JSON via temp+rename.
     tmp = movie_json.with_suffix(".json.tmp")
@@ -340,8 +372,8 @@ def export_kb(kb_root: Path, slug: str, title: str,
             "file": f"frames/{slug}/{fm['file']}",
             "tc": fm["tc"],
             "t_s": fm["t_s"],
-            "title": title,
-            "year": year,
+            "title": manifest_title,
+            "year": manifest_year,
         }
         lines.append(json.dumps(line_obj, ensure_ascii=False))
     with jsonl_path.open("a") as f:
@@ -372,6 +404,10 @@ def main():
                     help="root dir to write RAG-ready clean frames + sheets + manifests")
     ap.add_argument("--kb-force", action="store_true",
                     help="re-export KB artifacts even if per-movie JSON exists")
+    ap.add_argument("--kb-imdb", action=argparse.BooleanOptionalAction, default=True,
+                    help="Resolve title/year/genres/rating/cast via IMDb local catalog "
+                         "(default on; pass --no-kb-imdb to skip). Only applies when "
+                         "--kb-export is set.")
     args = ap.parse_args()
 
     mkv = args.mkv.resolve()
@@ -453,6 +489,7 @@ def main():
             rows=args.rows,
             header_font_size=header_font_size,
             force=args.kb_force,
+            kb_imdb=args.kb_imdb,
         )
 
     # cleanup

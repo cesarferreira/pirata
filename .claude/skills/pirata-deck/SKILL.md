@@ -160,7 +160,7 @@ Renderize **painel DOCTOR** de `menu-style.md`. Checks:
 - Disk free em `./downloads/`
 - **SWEEP**: `[ -f scripts/sheets_sweep.py ] && python3 -m py_compile scripts/sheets_sweep.py` → `[OK]`/`[FAIL]`
 - **DL DIR**: config `aria2.download_dir` existe e é readable → `[OK]`/`[FAIL]`
-- **CONTRACT**: `python3 scripts/contact_sheet.py --help` contém cada flag que o sweep baked (`--out --threshold --floor --target --cols --rows --width --workers --title --kb-export`) → `[OK]`/`[FAIL] sheet contract drift`
+- **CONTRACT**: `python3 scripts/contact_sheet.py --help` contém cada flag que o sweep baked (`--out --threshold --floor --target --cols --rows --width --workers --title --kb-export --kb-imdb`) → `[OK]`/`[FAIL] sheet contract drift`
 - **KB DIR**: `<repo>/kb/` existe e é writable (sweep cria automaticamente na primeira run com --kb on) → `[OK]`/`[FAIL]`
 
 ### 11 QUEUE (ad-hoc)
