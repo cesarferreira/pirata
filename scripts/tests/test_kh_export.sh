@@ -566,13 +566,19 @@ OUT6="$KB6/out"
 RUN6_LOG=$(python3 "$SCRIPT" --kb "$KB6" --out "$OUT6" 2>&1)
 rc=$?
 if [ "$rc" -eq 0 ]; then pass "29.corrupt JSON: builder exits 0 (graceful)"; else fail "29.corrupt JSON: builder exit was $rc (log: $RUN6_LOG)"; fi
-# Warn breadcrumb fires (build_manifest_json + build_slug_md each log once;
-# we just assert the slug name appears in a warn line — both messages name
-# the slug, so a single check covers either path).
-if printf '%s' "$RUN6_LOG" | grep -qE 'warn:.*per-movie JSON unreadable for test-corrupt'; then
-  pass "30.corrupt JSON: warn breadcrumb emitted"
+# Warn breadcrumb fires from BOTH overlay sites — split into two distinct
+# assertions so a future regression dropping one of the two log paths
+# (manifest.json header fallback vs bare-wrapper fallback) is caught
+# directly. Single-grep would silently pass if either message survived.
+if printf '%s' "$RUN6_LOG" | grep -qF 'manifest.json header falls back to manifest-derived title/year'; then
+  pass "30a.corrupt JSON: build_manifest_json warn breadcrumb emitted"
 else
-  fail "30.corrupt JSON: no warn breadcrumb"
+  fail "30a.corrupt JSON: missing build_manifest_json warn breadcrumb"
+fi
+if printf '%s' "$RUN6_LOG" | grep -qF 'falling back to bare-wrapper rendering'; then
+  pass "30b.corrupt JSON: build_slug_md warn breadcrumb emitted"
+else
+  fail "30b.corrupt JSON: missing build_slug_md warn breadcrumb"
 fi
 # manifest.json header falls back to manifest-derived slug-shaped title +
 # year=null; raw rows[] preserved verbatim from manifest.jsonl input.
@@ -600,6 +606,27 @@ if grep -qF "## IMDb metadata" "$OUT6/04-derived/per-movie/test-corrupt.md" 2>/d
   fail "33.corrupt JSON: wrapper unexpectedly emitted IMDb section"
 else
   pass "33.corrupt JSON: wrapper rendered in bare-manifest mode"
+fi
+
+# 34 — Non-UTF-8 byte corruption: Path.read_text(encoding="utf-8") raises
+# UnicodeDecodeError (ValueError subclass), distinct from JSONDecodeError
+# and OSError. Pre-fix, this escaped the except clause and crashed the
+# builder via main()'s catch-all. Plan-010-followup (kieran-python-001)
+# extended both except tuples to cover it.
+KB7=$(mktemp -d -t khexport-kb7.XXXXXX)
+trap "rm -rf $SYN_TMP $KB6 $KB7" EXIT  # combined cleanup with run-5 SYN_TMP and run-6 KB6
+mkdir -p "$KB7/per-movie"
+echo '{"slug":"test-utf8","idx":1,"tc":"00:00:01:00","t_s":1.0}' > "$KB7/manifest.jsonl"
+# Write raw non-UTF-8 bytes (0xff is invalid as a UTF-8 lead byte).
+printf '\xff\xfe garbage bytes \xff\xfe' > "$KB7/per-movie/test-utf8.json"
+OUT7="$KB7/out"
+RUN7_LOG=$(python3 "$SCRIPT" --kb "$KB7" --out "$OUT7" 2>&1)
+rc=$?
+if [ "$rc" -eq 0 ]; then pass "34.non-UTF-8 bytes: builder exits 0 (graceful)"; else fail "34.non-UTF-8 bytes: builder exit was $rc (log: $RUN7_LOG)"; fi
+if printf '%s' "$RUN7_LOG" | grep -qF 'per-movie JSON unreadable for test-utf8'; then
+  pass "35.non-UTF-8 bytes: warn breadcrumb emitted (UnicodeDecodeError path)"
+else
+  fail "35.non-UTF-8 bytes: no warn breadcrumb (encoding error escaped except)"
 fi
 
 # ----------------------------------------------------------------- summary ---

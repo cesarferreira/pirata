@@ -164,10 +164,13 @@ def build_manifest_json(groups: dict[str, dict],
                     title = j_title
                 if j_year is not None:
                     year = j_year
-            except (json.JSONDecodeError, OSError):
-                # Keep manifest-derived values on parse/IO failure (symmetric
-                # with build_slug_md). Surface as warn so corruption is
-                # observable instead of silently degrading the header.
+            except (json.JSONDecodeError, OSError, UnicodeDecodeError):
+                # Keep manifest-derived values on parse/IO/encoding failure
+                # (symmetric with build_slug_md). UnicodeDecodeError fires
+                # when the per-movie JSON file holds non-UTF-8 bytes —
+                # ValueError subclass, distinct from JSONDecodeError. Surface
+                # as warn so corruption is observable instead of silently
+                # degrading the header.
                 log("warn", f"per-movie JSON unreadable for {slug}; "
                             f"manifest.json header falls back to manifest-derived title/year")
         slugs_dict[slug] = {
@@ -216,11 +219,13 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
                 title = j_title
             if j_year is not None:
                 year = j_year
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError):
             # Symmetric with build_manifest_json: corrupt/unreadable per-movie
             # JSON degrades to bare-wrapper rendering instead of crashing the
-            # whole builder. has_json=False routes downstream code through
-            # the manifest-only path (no IMDb block, no fps/runtime/scdet).
+            # whole builder. UnicodeDecodeError covers non-UTF-8 bytes in the
+            # file (ValueError subclass, escapes JSONDecodeError/OSError).
+            # has_json=False routes downstream code through the manifest-only
+            # path (no IMDb block, no fps/runtime/scdet).
             has_json = False
             json_data = {}
             log("warn", f"per-movie JSON unreadable for {slug}; "
