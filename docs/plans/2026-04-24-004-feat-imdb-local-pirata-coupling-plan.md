@@ -296,7 +296,7 @@ The diagram shows the *flow* of the system. Boundary points to validate during r
   - All 20 PT-BR fixture titles resolve to expected tconsts.
   - `python3 -c 'from scripts.imdb_lookup import lookup_by_title; print(lookup_by_title("Dune", year=2021)[:1])'` returns a sane row in <100 ms (cold cache).
 
-- [ ] **Unit 3: KB enrichment in `scripts/contact_sheet.py` manifest builder + sweep `--kb-imdb` flag**
+- [ ] **Unit 3: KB enrichment in `scripts/contact_sheet.py` manifest builder + sweep `--kb-imdb` flag** _(expanded 2026-04-26 → see `docs/plans/2026-04-26-007-feat-imdb-kb-enrichment-plan.md` for the line-level executable workplan; the fields below stay as the contract reference, the sub-units A-G in plan 007 are the execution surface)_
 
   **Goal:** When `--kb-imdb` is set, `contact_sheet.py`'s `export_kb()` extracts (title, year) from the input filename via PTT, calls `lookup_by_title`, and merges `tconst, imdb_rating, imdb_votes, genres[], runtime_minutes, top_cast[5], akas{pt, en, es}, imdb_resolved_at, imdb_lookup_confidence` into the per-movie JSON manifest before atomic write. On no-match, append a `<iso-ts>\t<filename>\t<reason>` line to `logs/sweep_imdb_misses.log` and write the JSON without IMDb fields. The sweep wires `--kb-imdb` / `--no-kb-imdb` through to `contact_sheet.py`.
 
