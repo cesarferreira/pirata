@@ -1,0 +1,3643 @@
+{
+  "slug": "who-framed-roger-rabbit-1988",
+  "title": "Who Framed Roger Rabbit (1988)",
+  "year": 1988,
+  "fps": 23.976,
+  "runtime_s": 6227.414,
+  "source_file": "/Users/vidigal/claude-code/pirata/downloads/Who Framed Roger Rabbit (1988) [2160p] [4K] [BluRay] [5.1] [YTS.MX]/Who.Framed.Roger.Rabbit.1988.2160p.4K.BluRay.x265.10bit.AAC5.1-[YTS.MX].mkv",
+  "source_size_bytes": 5074199878,
+  "scdet": {
+    "threshold": 8,
+    "floor_s": 4.0,
+    "target": 300
+  },
+  "extracted_at": "2026-04-24T23:39:03Z",
+  "frames": [
+    {
+      "idx": 1,
+      "file": "who-framed-roger-rabbit-1988_frame_001.jpg",
+      "tc": "00:00:08:09",
+      "t_s": 8.425,
+      "sheet": 1,
+      "pos": [
+        0,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 2,
+      "file": "who-framed-roger-rabbit-1988_frame_002.jpg",
+      "tc": "00:01:18:04",
+      "t_s": 78.245,
+      "sheet": 1,
+      "pos": [
+        0,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 3,
+      "file": "who-framed-roger-rabbit-1988_frame_003.jpg",
+      "tc": "00:01:30:18",
+      "t_s": 90.841,
+      "sheet": 1,
+      "pos": [
+        0,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 4,
+      "file": "who-framed-roger-rabbit-1988_frame_004.jpg",
+      "tc": "00:01:43:01",
+      "t_s": 103.186,
+      "sheet": 1,
+      "pos": [
+        0,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 5,
+      "file": "who-framed-roger-rabbit-1988_frame_005.jpg",
+      "tc": "00:01:52:05",
+      "t_s": 112.362,
+      "sheet": 1,
+      "pos": [
+        0,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 6,
+      "file": "who-framed-roger-rabbit-1988_frame_006.jpg",
+      "tc": "00:02:11:01",
+      "t_s": 131.214,
+      "sheet": 1,
+      "pos": [
+        0,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 7,
+      "file": "who-framed-roger-rabbit-1988_frame_007.jpg",
+      "tc": "00:02:20:01",
+      "t_s": 140.182,
+      "sheet": 1,
+      "pos": [
+        0,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 8,
+      "file": "who-framed-roger-rabbit-1988_frame_008.jpg",
+      "tc": "00:02:31:12",
+      "t_s": 151.652,
+      "sheet": 1,
+      "pos": [
+        0,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 9,
+      "file": "who-framed-roger-rabbit-1988_frame_009.jpg",
+      "tc": "00:02:43:08",
+      "t_s": 163.538,
+      "sheet": 1,
+      "pos": [
+        0,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 10,
+      "file": "who-framed-roger-rabbit-1988_frame_010.jpg",
+      "tc": "00:02:52:15",
+      "t_s": 172.839,
+      "sheet": 1,
+      "pos": [
+        0,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 11,
+      "file": "who-framed-roger-rabbit-1988_frame_011.jpg",
+      "tc": "00:03:04:12",
+      "t_s": 184.685,
+      "sheet": 1,
+      "pos": [
+        1,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 12,
+      "file": "who-framed-roger-rabbit-1988_frame_012.jpg",
+      "tc": "00:03:13:22",
+      "t_s": 194.152,
+      "sheet": 1,
+      "pos": [
+        1,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 13,
+      "file": "who-framed-roger-rabbit-1988_frame_013.jpg",
+      "tc": "00:03:31:07",
+      "t_s": 211.503,
+      "sheet": 1,
+      "pos": [
+        1,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 14,
+      "file": "who-framed-roger-rabbit-1988_frame_014.jpg",
+      "tc": "00:03:49:14",
+      "t_s": 229.813,
+      "sheet": 1,
+      "pos": [
+        1,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 15,
+      "file": "who-framed-roger-rabbit-1988_frame_015.jpg",
+      "tc": "00:03:58:19",
+      "t_s": 239.072,
+      "sheet": 1,
+      "pos": [
+        1,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 16,
+      "file": "who-framed-roger-rabbit-1988_frame_016.jpg",
+      "tc": "00:05:43:00",
+      "t_s": 343.343,
+      "sheet": 1,
+      "pos": [
+        1,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 17,
+      "file": "who-framed-roger-rabbit-1988_frame_017.jpg",
+      "tc": "00:06:00:08",
+      "t_s": 360.694,
+      "sheet": 1,
+      "pos": [
+        1,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 18,
+      "file": "who-framed-roger-rabbit-1988_frame_018.jpg",
+      "tc": "00:06:29:01",
+      "t_s": 389.431,
+      "sheet": 1,
+      "pos": [
+        1,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 19,
+      "file": "who-framed-roger-rabbit-1988_frame_019.jpg",
+      "tc": "00:07:06:07",
+      "t_s": 426.718,
+      "sheet": 1,
+      "pos": [
+        1,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 20,
+      "file": "who-framed-roger-rabbit-1988_frame_020.jpg",
+      "tc": "00:07:18:00",
+      "t_s": 438.438,
+      "sheet": 1,
+      "pos": [
+        1,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 21,
+      "file": "who-framed-roger-rabbit-1988_frame_021.jpg",
+      "tc": "00:07:34:18",
+      "t_s": 455.246,
+      "sheet": 1,
+      "pos": [
+        2,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 22,
+      "file": "who-framed-roger-rabbit-1988_frame_022.jpg",
+      "tc": "00:07:45:19",
+      "t_s": 466.299,
+      "sheet": 1,
+      "pos": [
+        2,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 23,
+      "file": "who-framed-roger-rabbit-1988_frame_023.jpg",
+      "tc": "00:08:00:02",
+      "t_s": 480.605,
+      "sheet": 1,
+      "pos": [
+        2,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 24,
+      "file": "who-framed-roger-rabbit-1988_frame_024.jpg",
+      "tc": "00:08:24:01",
+      "t_s": 504.546,
+      "sheet": 1,
+      "pos": [
+        2,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 25,
+      "file": "who-framed-roger-rabbit-1988_frame_025.jpg",
+      "tc": "00:09:44:16",
+      "t_s": 585.293,
+      "sheet": 1,
+      "pos": [
+        2,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 26,
+      "file": "who-framed-roger-rabbit-1988_frame_026.jpg",
+      "tc": "00:09:59:22",
+      "t_s": 600.517,
+      "sheet": 1,
+      "pos": [
+        2,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 27,
+      "file": "who-framed-roger-rabbit-1988_frame_027.jpg",
+      "tc": "00:10:21:11",
+      "t_s": 622.08,
+      "sheet": 1,
+      "pos": [
+        2,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 28,
+      "file": "who-framed-roger-rabbit-1988_frame_028.jpg",
+      "tc": "00:11:15:15",
+      "t_s": 676.342,
+      "sheet": 1,
+      "pos": [
+        2,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 29,
+      "file": "who-framed-roger-rabbit-1988_frame_029.jpg",
+      "tc": "00:11:29:01",
+      "t_s": 689.772,
+      "sheet": 1,
+      "pos": [
+        2,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 30,
+      "file": "who-framed-roger-rabbit-1988_frame_030.jpg",
+      "tc": "00:11:39:21",
+      "t_s": 700.575,
+      "sheet": 1,
+      "pos": [
+        2,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 31,
+      "file": "who-framed-roger-rabbit-1988_frame_031.jpg",
+      "tc": "00:12:15:19",
+      "t_s": 736.569,
+      "sheet": 1,
+      "pos": [
+        3,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 32,
+      "file": "who-framed-roger-rabbit-1988_frame_032.jpg",
+      "tc": "00:12:29:14",
+      "t_s": 750.333,
+      "sheet": 1,
+      "pos": [
+        3,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 33,
+      "file": "who-framed-roger-rabbit-1988_frame_033.jpg",
+      "tc": "00:12:49:09",
+      "t_s": 770.186,
+      "sheet": 1,
+      "pos": [
+        3,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 34,
+      "file": "who-framed-roger-rabbit-1988_frame_034.jpg",
+      "tc": "00:13:11:16",
+      "t_s": 792.5,
+      "sheet": 1,
+      "pos": [
+        3,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 35,
+      "file": "who-framed-roger-rabbit-1988_frame_035.jpg",
+      "tc": "00:14:00:16",
+      "t_s": 841.549,
+      "sheet": 1,
+      "pos": [
+        3,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 36,
+      "file": "who-framed-roger-rabbit-1988_frame_036.jpg",
+      "tc": "00:15:17:12",
+      "t_s": 918.418,
+      "sheet": 1,
+      "pos": [
+        3,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 37,
+      "file": "who-framed-roger-rabbit-1988_frame_037.jpg",
+      "tc": "00:15:38:01",
+      "t_s": 938.98,
+      "sheet": 1,
+      "pos": [
+        3,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 38,
+      "file": "who-framed-roger-rabbit-1988_frame_038.jpg",
+      "tc": "00:15:49:01",
+      "t_s": 949.991,
+      "sheet": 1,
+      "pos": [
+        3,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 39,
+      "file": "who-framed-roger-rabbit-1988_frame_039.jpg",
+      "tc": "00:16:01:04",
+      "t_s": 962.128,
+      "sheet": 1,
+      "pos": [
+        3,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 40,
+      "file": "who-framed-roger-rabbit-1988_frame_040.jpg",
+      "tc": "00:16:12:18",
+      "t_s": 973.723,
+      "sheet": 1,
+      "pos": [
+        3,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 41,
+      "file": "who-framed-roger-rabbit-1988_frame_041.jpg",
+      "tc": "00:16:40:21",
+      "t_s": 1001.876,
+      "sheet": 1,
+      "pos": [
+        4,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 42,
+      "file": "who-framed-roger-rabbit-1988_frame_042.jpg",
+      "tc": "00:16:50:12",
+      "t_s": 1011.511,
+      "sheet": 1,
+      "pos": [
+        4,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 43,
+      "file": "who-framed-roger-rabbit-1988_frame_043.jpg",
+      "tc": "00:17:00:08",
+      "t_s": 1021.395,
+      "sheet": 1,
+      "pos": [
+        4,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 44,
+      "file": "who-framed-roger-rabbit-1988_frame_044.jpg",
+      "tc": "00:17:09:08",
+      "t_s": 1030.363,
+      "sheet": 1,
+      "pos": [
+        4,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 45,
+      "file": "who-framed-roger-rabbit-1988_frame_045.jpg",
+      "tc": "00:17:40:07",
+      "t_s": 1061.352,
+      "sheet": 1,
+      "pos": [
+        4,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 46,
+      "file": "who-framed-roger-rabbit-1988_frame_046.jpg",
+      "tc": "00:17:53:09",
+      "t_s": 1074.49,
+      "sheet": 1,
+      "pos": [
+        4,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 47,
+      "file": "who-framed-roger-rabbit-1988_frame_047.jpg",
+      "tc": "00:18:12:15",
+      "t_s": 1093.759,
+      "sheet": 1,
+      "pos": [
+        4,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 48,
+      "file": "who-framed-roger-rabbit-1988_frame_048.jpg",
+      "tc": "00:18:38:18",
+      "t_s": 1119.869,
+      "sheet": 1,
+      "pos": [
+        4,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 49,
+      "file": "who-framed-roger-rabbit-1988_frame_049.jpg",
+      "tc": "00:18:59:22",
+      "t_s": 1141.098,
+      "sheet": 1,
+      "pos": [
+        4,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 50,
+      "file": "who-framed-roger-rabbit-1988_frame_050.jpg",
+      "tc": "00:19:14:07",
+      "t_s": 1155.446,
+      "sheet": 1,
+      "pos": [
+        4,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 51,
+      "file": "who-framed-roger-rabbit-1988_frame_051.jpg",
+      "tc": "00:19:27:07",
+      "t_s": 1168.459,
+      "sheet": 1,
+      "pos": [
+        5,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 52,
+      "file": "who-framed-roger-rabbit-1988_frame_052.jpg",
+      "tc": "00:20:24:12",
+      "t_s": 1225.725,
+      "sheet": 1,
+      "pos": [
+        5,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 53,
+      "file": "who-framed-roger-rabbit-1988_frame_053.jpg",
+      "tc": "00:20:51:16",
+      "t_s": 1252.96,
+      "sheet": 1,
+      "pos": [
+        5,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 54,
+      "file": "who-framed-roger-rabbit-1988_frame_054.jpg",
+      "tc": "00:21:11:12",
+      "t_s": 1272.813,
+      "sheet": 1,
+      "pos": [
+        5,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 55,
+      "file": "who-framed-roger-rabbit-1988_frame_055.jpg",
+      "tc": "00:22:30:07",
+      "t_s": 1351.642,
+      "sheet": 1,
+      "pos": [
+        5,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 56,
+      "file": "who-framed-roger-rabbit-1988_frame_056.jpg",
+      "tc": "00:22:52:01",
+      "t_s": 1373.455,
+      "sheet": 1,
+      "pos": [
+        5,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 57,
+      "file": "who-framed-roger-rabbit-1988_frame_057.jpg",
+      "tc": "00:23:16:22",
+      "t_s": 1398.355,
+      "sheet": 1,
+      "pos": [
+        5,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 58,
+      "file": "who-framed-roger-rabbit-1988_frame_058.jpg",
+      "tc": "00:23:54:05",
+      "t_s": 1435.643,
+      "sheet": 1,
+      "pos": [
+        5,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 59,
+      "file": "who-framed-roger-rabbit-1988_frame_059.jpg",
+      "tc": "00:24:03:04",
+      "t_s": 1444.61,
+      "sheet": 1,
+      "pos": [
+        5,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 60,
+      "file": "who-framed-roger-rabbit-1988_frame_060.jpg",
+      "tc": "00:24:56:19",
+      "t_s": 1498.33,
+      "sheet": 1,
+      "pos": [
+        5,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 61,
+      "file": "who-framed-roger-rabbit-1988_frame_061.jpg",
+      "tc": "00:25:20:08",
+      "t_s": 1521.895,
+      "sheet": 1,
+      "pos": [
+        6,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 62,
+      "file": "who-framed-roger-rabbit-1988_frame_062.jpg",
+      "tc": "00:25:34:00",
+      "t_s": 1535.534,
+      "sheet": 1,
+      "pos": [
+        6,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 63,
+      "file": "who-framed-roger-rabbit-1988_frame_063.jpg",
+      "tc": "00:26:13:12",
+      "t_s": 1575.074,
+      "sheet": 1,
+      "pos": [
+        6,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 64,
+      "file": "who-framed-roger-rabbit-1988_frame_064.jpg",
+      "tc": "00:26:27:08",
+      "t_s": 1588.962,
+      "sheet": 1,
+      "pos": [
+        6,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 65,
+      "file": "who-framed-roger-rabbit-1988_frame_065.jpg",
+      "tc": "00:26:38:05",
+      "t_s": 1599.848,
+      "sheet": 1,
+      "pos": [
+        6,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 66,
+      "file": "who-framed-roger-rabbit-1988_frame_066.jpg",
+      "tc": "00:27:57:16",
+      "t_s": 1679.386,
+      "sheet": 1,
+      "pos": [
+        6,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 67,
+      "file": "who-framed-roger-rabbit-1988_frame_067.jpg",
+      "tc": "00:28:13:02",
+      "t_s": 1694.818,
+      "sheet": 1,
+      "pos": [
+        6,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 68,
+      "file": "who-framed-roger-rabbit-1988_frame_068.jpg",
+      "tc": "00:28:30:22",
+      "t_s": 1712.628,
+      "sheet": 1,
+      "pos": [
+        6,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 69,
+      "file": "who-framed-roger-rabbit-1988_frame_069.jpg",
+      "tc": "00:28:47:15",
+      "t_s": 1729.353,
+      "sheet": 1,
+      "pos": [
+        6,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 70,
+      "file": "who-framed-roger-rabbit-1988_frame_070.jpg",
+      "tc": "00:29:06:12",
+      "t_s": 1748.288,
+      "sheet": 1,
+      "pos": [
+        6,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 71,
+      "file": "who-framed-roger-rabbit-1988_frame_071.jpg",
+      "tc": "00:29:21:19",
+      "t_s": 1763.595,
+      "sheet": 1,
+      "pos": [
+        7,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 72,
+      "file": "who-framed-roger-rabbit-1988_frame_072.jpg",
+      "tc": "00:29:33:18",
+      "t_s": 1775.565,
+      "sheet": 1,
+      "pos": [
+        7,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 73,
+      "file": "who-framed-roger-rabbit-1988_frame_073.jpg",
+      "tc": "00:29:54:01",
+      "t_s": 1795.877,
+      "sheet": 1,
+      "pos": [
+        7,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 74,
+      "file": "who-framed-roger-rabbit-1988_frame_074.jpg",
+      "tc": "00:30:13:18",
+      "t_s": 1815.564,
+      "sheet": 1,
+      "pos": [
+        7,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 75,
+      "file": "who-framed-roger-rabbit-1988_frame_075.jpg",
+      "tc": "00:30:25:14",
+      "t_s": 1827.409,
+      "sheet": 1,
+      "pos": [
+        7,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 76,
+      "file": "who-framed-roger-rabbit-1988_frame_076.jpg",
+      "tc": "00:30:36:12",
+      "t_s": 1838.337,
+      "sheet": 1,
+      "pos": [
+        7,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 77,
+      "file": "who-framed-roger-rabbit-1988_frame_077.jpg",
+      "tc": "00:30:50:05",
+      "t_s": 1852.059,
+      "sheet": 1,
+      "pos": [
+        7,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 78,
+      "file": "who-framed-roger-rabbit-1988_frame_078.jpg",
+      "tc": "00:31:03:15",
+      "t_s": 1865.53,
+      "sheet": 1,
+      "pos": [
+        7,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 79,
+      "file": "who-framed-roger-rabbit-1988_frame_079.jpg",
+      "tc": "00:31:14:00",
+      "t_s": 1875.874,
+      "sheet": 1,
+      "pos": [
+        7,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 80,
+      "file": "who-framed-roger-rabbit-1988_frame_080.jpg",
+      "tc": "00:31:37:12",
+      "t_s": 1899.398,
+      "sheet": 1,
+      "pos": [
+        7,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 81,
+      "file": "who-framed-roger-rabbit-1988_frame_081.jpg",
+      "tc": "00:31:48:05",
+      "t_s": 1910.158,
+      "sheet": 1,
+      "pos": [
+        8,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 82,
+      "file": "who-framed-roger-rabbit-1988_frame_082.jpg",
+      "tc": "00:31:57:08",
+      "t_s": 1919.292,
+      "sheet": 1,
+      "pos": [
+        8,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 83,
+      "file": "who-framed-roger-rabbit-1988_frame_083.jpg",
+      "tc": "00:32:15:05",
+      "t_s": 1937.185,
+      "sheet": 1,
+      "pos": [
+        8,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 84,
+      "file": "who-framed-roger-rabbit-1988_frame_084.jpg",
+      "tc": "00:32:51:11",
+      "t_s": 1973.43,
+      "sheet": 1,
+      "pos": [
+        8,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 85,
+      "file": "who-framed-roger-rabbit-1988_frame_085.jpg",
+      "tc": "00:33:21:14",
+      "t_s": 2003.585,
+      "sheet": 1,
+      "pos": [
+        8,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 86,
+      "file": "who-framed-roger-rabbit-1988_frame_086.jpg",
+      "tc": "00:33:32:04",
+      "t_s": 2014.179,
+      "sheet": 1,
+      "pos": [
+        8,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 87,
+      "file": "who-framed-roger-rabbit-1988_frame_087.jpg",
+      "tc": "00:33:43:05",
+      "t_s": 2025.273,
+      "sheet": 1,
+      "pos": [
+        8,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 88,
+      "file": "who-framed-roger-rabbit-1988_frame_088.jpg",
+      "tc": "00:33:55:14",
+      "t_s": 2037.619,
+      "sheet": 1,
+      "pos": [
+        8,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 89,
+      "file": "who-framed-roger-rabbit-1988_frame_089.jpg",
+      "tc": "00:34:14:15",
+      "t_s": 2056.68,
+      "sheet": 1,
+      "pos": [
+        8,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 90,
+      "file": "who-framed-roger-rabbit-1988_frame_090.jpg",
+      "tc": "00:34:23:12",
+      "t_s": 2065.564,
+      "sheet": 1,
+      "pos": [
+        8,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 91,
+      "file": "who-framed-roger-rabbit-1988_frame_091.jpg",
+      "tc": "00:34:34:12",
+      "t_s": 2076.616,
+      "sheet": 1,
+      "pos": [
+        9,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 92,
+      "file": "who-framed-roger-rabbit-1988_frame_092.jpg",
+      "tc": "00:34:47:05",
+      "t_s": 2089.337,
+      "sheet": 1,
+      "pos": [
+        9,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 93,
+      "file": "who-framed-roger-rabbit-1988_frame_093.jpg",
+      "tc": "00:35:03:14",
+      "t_s": 2105.687,
+      "sheet": 1,
+      "pos": [
+        9,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 94,
+      "file": "who-framed-roger-rabbit-1988_frame_094.jpg",
+      "tc": "00:35:14:21",
+      "t_s": 2116.99,
+      "sheet": 1,
+      "pos": [
+        9,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 95,
+      "file": "who-framed-roger-rabbit-1988_frame_095.jpg",
+      "tc": "00:35:26:04",
+      "t_s": 2128.293,
+      "sheet": 1,
+      "pos": [
+        9,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 96,
+      "file": "who-framed-roger-rabbit-1988_frame_096.jpg",
+      "tc": "00:35:42:18",
+      "t_s": 2144.893,
+      "sheet": 1,
+      "pos": [
+        9,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 97,
+      "file": "who-framed-roger-rabbit-1988_frame_097.jpg",
+      "tc": "00:36:21:18",
+      "t_s": 2183.973,
+      "sheet": 1,
+      "pos": [
+        9,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 98,
+      "file": "who-framed-roger-rabbit-1988_frame_098.jpg",
+      "tc": "00:37:06:18",
+      "t_s": 2228.977,
+      "sheet": 1,
+      "pos": [
+        9,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 99,
+      "file": "who-framed-roger-rabbit-1988_frame_099.jpg",
+      "tc": "00:37:44:15",
+      "t_s": 2266.931,
+      "sheet": 1,
+      "pos": [
+        9,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 100,
+      "file": "who-framed-roger-rabbit-1988_frame_100.jpg",
+      "tc": "00:38:00:05",
+      "t_s": 2282.489,
+      "sheet": 1,
+      "pos": [
+        9,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 101,
+      "file": "who-framed-roger-rabbit-1988_frame_101.jpg",
+      "tc": "00:38:12:12",
+      "t_s": 2294.834,
+      "sheet": 2,
+      "pos": [
+        0,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 102,
+      "file": "who-framed-roger-rabbit-1988_frame_102.jpg",
+      "tc": "00:38:28:02",
+      "t_s": 2310.433,
+      "sheet": 2,
+      "pos": [
+        0,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 103,
+      "file": "who-framed-roger-rabbit-1988_frame_103.jpg",
+      "tc": "00:38:37:05",
+      "t_s": 2319.526,
+      "sheet": 2,
+      "pos": [
+        0,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 104,
+      "file": "who-framed-roger-rabbit-1988_frame_104.jpg",
+      "tc": "00:39:00:05",
+      "t_s": 2342.59,
+      "sheet": 2,
+      "pos": [
+        0,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 105,
+      "file": "who-framed-roger-rabbit-1988_frame_105.jpg",
+      "tc": "00:39:16:01",
+      "t_s": 2358.398,
+      "sheet": 2,
+      "pos": [
+        0,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 106,
+      "file": "who-framed-roger-rabbit-1988_frame_106.jpg",
+      "tc": "00:39:28:01",
+      "t_s": 2370.41,
+      "sheet": 2,
+      "pos": [
+        0,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 107,
+      "file": "who-framed-roger-rabbit-1988_frame_107.jpg",
+      "tc": "00:39:38:18",
+      "t_s": 2381.17,
+      "sheet": 2,
+      "pos": [
+        0,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 108,
+      "file": "who-framed-roger-rabbit-1988_frame_108.jpg",
+      "tc": "00:39:48:12",
+      "t_s": 2390.889,
+      "sheet": 2,
+      "pos": [
+        0,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 109,
+      "file": "who-framed-roger-rabbit-1988_frame_109.jpg",
+      "tc": "00:40:14:18",
+      "t_s": 2417.206,
+      "sheet": 2,
+      "pos": [
+        0,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 110,
+      "file": "who-framed-roger-rabbit-1988_frame_110.jpg",
+      "tc": "00:40:27:04",
+      "t_s": 2429.594,
+      "sheet": 2,
+      "pos": [
+        0,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 111,
+      "file": "who-framed-roger-rabbit-1988_frame_111.jpg",
+      "tc": "00:40:45:00",
+      "t_s": 2447.445,
+      "sheet": 2,
+      "pos": [
+        1,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 112,
+      "file": "who-framed-roger-rabbit-1988_frame_112.jpg",
+      "tc": "00:40:59:21",
+      "t_s": 2462.335,
+      "sheet": 2,
+      "pos": [
+        1,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 113,
+      "file": "who-framed-roger-rabbit-1988_frame_113.jpg",
+      "tc": "00:41:20:18",
+      "t_s": 2483.231,
+      "sheet": 2,
+      "pos": [
+        1,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 114,
+      "file": "who-framed-roger-rabbit-1988_frame_114.jpg",
+      "tc": "00:41:36:14",
+      "t_s": 2499.08,
+      "sheet": 2,
+      "pos": [
+        1,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 115,
+      "file": "who-framed-roger-rabbit-1988_frame_115.jpg",
+      "tc": "00:41:51:00",
+      "t_s": 2513.511,
+      "sheet": 2,
+      "pos": [
+        1,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 116,
+      "file": "who-framed-roger-rabbit-1988_frame_116.jpg",
+      "tc": "00:42:00:12",
+      "t_s": 2523.062,
+      "sheet": 2,
+      "pos": [
+        1,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 117,
+      "file": "who-framed-roger-rabbit-1988_frame_117.jpg",
+      "tc": "00:42:22:14",
+      "t_s": 2545.126,
+      "sheet": 2,
+      "pos": [
+        1,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 118,
+      "file": "who-framed-roger-rabbit-1988_frame_118.jpg",
+      "tc": "00:42:32:07",
+      "t_s": 2554.844,
+      "sheet": 2,
+      "pos": [
+        1,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 119,
+      "file": "who-framed-roger-rabbit-1988_frame_119.jpg",
+      "tc": "00:42:45:02",
+      "t_s": 2567.69,
+      "sheet": 2,
+      "pos": [
+        1,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 120,
+      "file": "who-framed-roger-rabbit-1988_frame_120.jpg",
+      "tc": "00:44:21:04",
+      "t_s": 2663.828,
+      "sheet": 2,
+      "pos": [
+        1,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 121,
+      "file": "who-framed-roger-rabbit-1988_frame_121.jpg",
+      "tc": "00:45:21:18",
+      "t_s": 2724.472,
+      "sheet": 2,
+      "pos": [
+        2,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 122,
+      "file": "who-framed-roger-rabbit-1988_frame_122.jpg",
+      "tc": "00:45:30:11",
+      "t_s": 2733.189,
+      "sheet": 2,
+      "pos": [
+        2,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 123,
+      "file": "who-framed-roger-rabbit-1988_frame_123.jpg",
+      "tc": "00:45:39:12",
+      "t_s": 2742.24,
+      "sheet": 2,
+      "pos": [
+        2,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 124,
+      "file": "who-framed-roger-rabbit-1988_frame_124.jpg",
+      "tc": "00:45:50:15",
+      "t_s": 2753.417,
+      "sheet": 2,
+      "pos": [
+        2,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 125,
+      "file": "who-framed-roger-rabbit-1988_frame_125.jpg",
+      "tc": "00:46:05:12",
+      "t_s": 2768.266,
+      "sheet": 2,
+      "pos": [
+        2,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 126,
+      "file": "who-framed-roger-rabbit-1988_frame_126.jpg",
+      "tc": "00:46:21:05",
+      "t_s": 2784.031,
+      "sheet": 2,
+      "pos": [
+        2,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 127,
+      "file": "who-framed-roger-rabbit-1988_frame_127.jpg",
+      "tc": "00:46:33:22",
+      "t_s": 2796.752,
+      "sheet": 2,
+      "pos": [
+        2,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 128,
+      "file": "who-framed-roger-rabbit-1988_frame_128.jpg",
+      "tc": "00:46:58:05",
+      "t_s": 2821.068,
+      "sheet": 2,
+      "pos": [
+        2,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 129,
+      "file": "who-framed-roger-rabbit-1988_frame_129.jpg",
+      "tc": "00:47:12:12",
+      "t_s": 2835.374,
+      "sheet": 2,
+      "pos": [
+        2,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 130,
+      "file": "who-framed-roger-rabbit-1988_frame_130.jpg",
+      "tc": "00:47:21:18",
+      "t_s": 2844.633,
+      "sheet": 2,
+      "pos": [
+        2,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 131,
+      "file": "who-framed-roger-rabbit-1988_frame_131.jpg",
+      "tc": "00:47:48:15",
+      "t_s": 2871.494,
+      "sheet": 2,
+      "pos": [
+        3,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 132,
+      "file": "who-framed-roger-rabbit-1988_frame_132.jpg",
+      "tc": "00:48:02:19",
+      "t_s": 2885.716,
+      "sheet": 2,
+      "pos": [
+        3,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 133,
+      "file": "who-framed-roger-rabbit-1988_frame_133.jpg",
+      "tc": "00:49:00:09",
+      "t_s": 2943.357,
+      "sheet": 2,
+      "pos": [
+        3,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 134,
+      "file": "who-framed-roger-rabbit-1988_frame_134.jpg",
+      "tc": "00:49:34:14",
+      "t_s": 2977.558,
+      "sheet": 2,
+      "pos": [
+        3,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 135,
+      "file": "who-framed-roger-rabbit-1988_frame_135.jpg",
+      "tc": "00:49:51:15",
+      "t_s": 2994.658,
+      "sheet": 2,
+      "pos": [
+        3,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 136,
+      "file": "who-framed-roger-rabbit-1988_frame_136.jpg",
+      "tc": "00:50:02:15",
+      "t_s": 3005.669,
+      "sheet": 2,
+      "pos": [
+        3,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 137,
+      "file": "who-framed-roger-rabbit-1988_frame_137.jpg",
+      "tc": "00:50:15:18",
+      "t_s": 3018.807,
+      "sheet": 2,
+      "pos": [
+        3,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 138,
+      "file": "who-framed-roger-rabbit-1988_frame_138.jpg",
+      "tc": "00:50:57:18",
+      "t_s": 3060.808,
+      "sheet": 2,
+      "pos": [
+        3,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 139,
+      "file": "who-framed-roger-rabbit-1988_frame_139.jpg",
+      "tc": "00:51:09:05",
+      "t_s": 3072.319,
+      "sheet": 2,
+      "pos": [
+        3,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 140,
+      "file": "who-framed-roger-rabbit-1988_frame_140.jpg",
+      "tc": "00:51:43:07",
+      "t_s": 3106.395,
+      "sheet": 2,
+      "pos": [
+        3,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 141,
+      "file": "who-framed-roger-rabbit-1988_frame_141.jpg",
+      "tc": "00:52:09:11",
+      "t_s": 3132.588,
+      "sheet": 2,
+      "pos": [
+        4,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 142,
+      "file": "who-framed-roger-rabbit-1988_frame_142.jpg",
+      "tc": "00:52:21:16",
+      "t_s": 3144.85,
+      "sheet": 2,
+      "pos": [
+        4,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 143,
+      "file": "who-framed-roger-rabbit-1988_frame_143.jpg",
+      "tc": "00:52:36:01",
+      "t_s": 3159.198,
+      "sheet": 2,
+      "pos": [
+        4,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 144,
+      "file": "who-framed-roger-rabbit-1988_frame_144.jpg",
+      "tc": "00:52:51:01",
+      "t_s": 3174.254,
+      "sheet": 2,
+      "pos": [
+        4,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 145,
+      "file": "who-framed-roger-rabbit-1988_frame_145.jpg",
+      "tc": "00:53:23:09",
+      "t_s": 3206.62,
+      "sheet": 2,
+      "pos": [
+        4,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 146,
+      "file": "who-framed-roger-rabbit-1988_frame_146.jpg",
+      "tc": "00:53:43:01",
+      "t_s": 3226.265,
+      "sheet": 2,
+      "pos": [
+        4,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 147,
+      "file": "who-framed-roger-rabbit-1988_frame_147.jpg",
+      "tc": "00:53:55:14",
+      "t_s": 3238.819,
+      "sheet": 2,
+      "pos": [
+        4,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 148,
+      "file": "who-framed-roger-rabbit-1988_frame_148.jpg",
+      "tc": "00:54:20:15",
+      "t_s": 3263.886,
+      "sheet": 2,
+      "pos": [
+        4,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 149,
+      "file": "who-framed-roger-rabbit-1988_frame_149.jpg",
+      "tc": "00:54:41:22",
+      "t_s": 3285.24,
+      "sheet": 2,
+      "pos": [
+        4,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 150,
+      "file": "who-framed-roger-rabbit-1988_frame_150.jpg",
+      "tc": "00:54:53:08",
+      "t_s": 3296.627,
+      "sheet": 2,
+      "pos": [
+        4,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 151,
+      "file": "who-framed-roger-rabbit-1988_frame_151.jpg",
+      "tc": "00:55:02:08",
+      "t_s": 3305.677,
+      "sheet": 2,
+      "pos": [
+        5,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 152,
+      "file": "who-framed-roger-rabbit-1988_frame_152.jpg",
+      "tc": "00:55:21:15",
+      "t_s": 3324.947,
+      "sheet": 2,
+      "pos": [
+        5,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 153,
+      "file": "who-framed-roger-rabbit-1988_frame_153.jpg",
+      "tc": "00:55:39:07",
+      "t_s": 3342.631,
+      "sheet": 2,
+      "pos": [
+        5,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 154,
+      "file": "who-framed-roger-rabbit-1988_frame_154.jpg",
+      "tc": "00:55:49:01",
+      "t_s": 3352.391,
+      "sheet": 2,
+      "pos": [
+        5,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 155,
+      "file": "who-framed-roger-rabbit-1988_frame_155.jpg",
+      "tc": "00:56:05:15",
+      "t_s": 3368.991,
+      "sheet": 2,
+      "pos": [
+        5,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 156,
+      "file": "who-framed-roger-rabbit-1988_frame_156.jpg",
+      "tc": "00:56:17:12",
+      "t_s": 3380.919,
+      "sheet": 2,
+      "pos": [
+        5,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 157,
+      "file": "who-framed-roger-rabbit-1988_frame_157.jpg",
+      "tc": "00:56:35:00",
+      "t_s": 3398.395,
+      "sheet": 2,
+      "pos": [
+        5,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 158,
+      "file": "who-framed-roger-rabbit-1988_frame_158.jpg",
+      "tc": "00:56:46:21",
+      "t_s": 3410.282,
+      "sheet": 2,
+      "pos": [
+        5,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 159,
+      "file": "who-framed-roger-rabbit-1988_frame_159.jpg",
+      "tc": "00:57:00:11",
+      "t_s": 3423.879,
+      "sheet": 2,
+      "pos": [
+        5,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 160,
+      "file": "who-framed-roger-rabbit-1988_frame_160.jpg",
+      "tc": "00:57:20:18",
+      "t_s": 3444.232,
+      "sheet": 2,
+      "pos": [
+        5,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 161,
+      "file": "who-framed-roger-rabbit-1988_frame_161.jpg",
+      "tc": "00:57:51:18",
+      "t_s": 3475.222,
+      "sheet": 2,
+      "pos": [
+        6,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 162,
+      "file": "who-framed-roger-rabbit-1988_frame_162.jpg",
+      "tc": "00:58:04:18",
+      "t_s": 3488.235,
+      "sheet": 2,
+      "pos": [
+        6,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 163,
+      "file": "who-framed-roger-rabbit-1988_frame_163.jpg",
+      "tc": "00:58:18:12",
+      "t_s": 3501.999,
+      "sheet": 2,
+      "pos": [
+        6,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 164,
+      "file": "who-framed-roger-rabbit-1988_frame_164.jpg",
+      "tc": "00:58:27:08",
+      "t_s": 3510.882,
+      "sheet": 2,
+      "pos": [
+        6,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 165,
+      "file": "who-framed-roger-rabbit-1988_frame_165.jpg",
+      "tc": "00:58:36:07",
+      "t_s": 3519.808,
+      "sheet": 2,
+      "pos": [
+        6,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 166,
+      "file": "who-framed-roger-rabbit-1988_frame_166.jpg",
+      "tc": "00:58:47:14",
+      "t_s": 3531.111,
+      "sheet": 2,
+      "pos": [
+        6,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 167,
+      "file": "who-framed-roger-rabbit-1988_frame_167.jpg",
+      "tc": "00:58:56:15",
+      "t_s": 3540.203,
+      "sheet": 2,
+      "pos": [
+        6,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 168,
+      "file": "who-framed-roger-rabbit-1988_frame_168.jpg",
+      "tc": "00:59:05:05",
+      "t_s": 3548.754,
+      "sheet": 2,
+      "pos": [
+        6,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 169,
+      "file": "who-framed-roger-rabbit-1988_frame_169.jpg",
+      "tc": "00:59:19:09",
+      "t_s": 3562.976,
+      "sheet": 2,
+      "pos": [
+        6,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 170,
+      "file": "who-framed-roger-rabbit-1988_frame_170.jpg",
+      "tc": "00:59:30:05",
+      "t_s": 3573.82,
+      "sheet": 2,
+      "pos": [
+        6,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 171,
+      "file": "who-framed-roger-rabbit-1988_frame_171.jpg",
+      "tc": "00:59:41:09",
+      "t_s": 3584.998,
+      "sheet": 2,
+      "pos": [
+        7,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 172,
+      "file": "who-framed-roger-rabbit-1988_frame_172.jpg",
+      "tc": "00:59:58:18",
+      "t_s": 3602.349,
+      "sheet": 2,
+      "pos": [
+        7,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 173,
+      "file": "who-framed-roger-rabbit-1988_frame_173.jpg",
+      "tc": "01:00:17:05",
+      "t_s": 3620.826,
+      "sheet": 2,
+      "pos": [
+        7,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 174,
+      "file": "who-framed-roger-rabbit-1988_frame_174.jpg",
+      "tc": "01:02:04:18",
+      "t_s": 3728.516,
+      "sheet": 2,
+      "pos": [
+        7,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 175,
+      "file": "who-framed-roger-rabbit-1988_frame_175.jpg",
+      "tc": "01:02:30:01",
+      "t_s": 3753.833,
+      "sheet": 2,
+      "pos": [
+        7,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 176,
+      "file": "who-framed-roger-rabbit-1988_frame_176.jpg",
+      "tc": "01:03:22:16",
+      "t_s": 3806.511,
+      "sheet": 2,
+      "pos": [
+        7,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 177,
+      "file": "who-framed-roger-rabbit-1988_frame_177.jpg",
+      "tc": "01:03:57:19",
+      "t_s": 3841.671,
+      "sheet": 2,
+      "pos": [
+        7,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 178,
+      "file": "who-framed-roger-rabbit-1988_frame_178.jpg",
+      "tc": "01:04:17:08",
+      "t_s": 3861.191,
+      "sheet": 2,
+      "pos": [
+        7,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 179,
+      "file": "who-framed-roger-rabbit-1988_frame_179.jpg",
+      "tc": "01:05:07:16",
+      "t_s": 3911.616,
+      "sheet": 2,
+      "pos": [
+        7,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 180,
+      "file": "who-framed-roger-rabbit-1988_frame_180.jpg",
+      "tc": "01:05:19:08",
+      "t_s": 3923.294,
+      "sheet": 2,
+      "pos": [
+        7,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 181,
+      "file": "who-framed-roger-rabbit-1988_frame_181.jpg",
+      "tc": "01:05:41:15",
+      "t_s": 3945.608,
+      "sheet": 2,
+      "pos": [
+        8,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 182,
+      "file": "who-framed-roger-rabbit-1988_frame_182.jpg",
+      "tc": "01:05:57:22",
+      "t_s": 3961.916,
+      "sheet": 2,
+      "pos": [
+        8,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 183,
+      "file": "who-framed-roger-rabbit-1988_frame_183.jpg",
+      "tc": "01:06:12:14",
+      "t_s": 3976.556,
+      "sheet": 2,
+      "pos": [
+        8,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 184,
+      "file": "who-framed-roger-rabbit-1988_frame_184.jpg",
+      "tc": "01:06:41:07",
+      "t_s": 4005.293,
+      "sheet": 2,
+      "pos": [
+        8,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 185,
+      "file": "who-framed-roger-rabbit-1988_frame_185.jpg",
+      "tc": "01:06:59:00",
+      "t_s": 4023.019,
+      "sheet": 2,
+      "pos": [
+        8,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 186,
+      "file": "who-framed-roger-rabbit-1988_frame_186.jpg",
+      "tc": "01:07:08:01",
+      "t_s": 4032.07,
+      "sheet": 2,
+      "pos": [
+        8,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 187,
+      "file": "who-framed-roger-rabbit-1988_frame_187.jpg",
+      "tc": "01:07:17:09",
+      "t_s": 4041.454,
+      "sheet": 2,
+      "pos": [
+        8,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 188,
+      "file": "who-framed-roger-rabbit-1988_frame_188.jpg",
+      "tc": "01:07:31:22",
+      "t_s": 4055.969,
+      "sheet": 2,
+      "pos": [
+        8,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 189,
+      "file": "who-framed-roger-rabbit-1988_frame_189.jpg",
+      "tc": "01:07:53:21",
+      "t_s": 4077.949,
+      "sheet": 2,
+      "pos": [
+        8,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 190,
+      "file": "who-framed-roger-rabbit-1988_frame_190.jpg",
+      "tc": "01:08:16:15",
+      "t_s": 4100.722,
+      "sheet": 2,
+      "pos": [
+        8,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 191,
+      "file": "who-framed-roger-rabbit-1988_frame_191.jpg",
+      "tc": "01:09:24:11",
+      "t_s": 4168.623,
+      "sheet": 2,
+      "pos": [
+        9,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 192,
+      "file": "who-framed-roger-rabbit-1988_frame_192.jpg",
+      "tc": "01:09:43:12",
+      "t_s": 4187.725,
+      "sheet": 2,
+      "pos": [
+        9,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 193,
+      "file": "who-framed-roger-rabbit-1988_frame_193.jpg",
+      "tc": "01:10:20:18",
+      "t_s": 4225.012,
+      "sheet": 2,
+      "pos": [
+        9,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 194,
+      "file": "who-framed-roger-rabbit-1988_frame_194.jpg",
+      "tc": "01:10:31:05",
+      "t_s": 4235.481,
+      "sheet": 2,
+      "pos": [
+        9,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 195,
+      "file": "who-framed-roger-rabbit-1988_frame_195.jpg",
+      "tc": "01:10:42:05",
+      "t_s": 4246.451,
+      "sheet": 2,
+      "pos": [
+        9,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 196,
+      "file": "who-framed-roger-rabbit-1988_frame_196.jpg",
+      "tc": "01:11:03:18",
+      "t_s": 4268.014,
+      "sheet": 2,
+      "pos": [
+        9,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 197,
+      "file": "who-framed-roger-rabbit-1988_frame_197.jpg",
+      "tc": "01:11:13:18",
+      "t_s": 4278.065,
+      "sheet": 2,
+      "pos": [
+        9,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 198,
+      "file": "who-framed-roger-rabbit-1988_frame_198.jpg",
+      "tc": "01:11:24:05",
+      "t_s": 4288.493,
+      "sheet": 2,
+      "pos": [
+        9,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 199,
+      "file": "who-framed-roger-rabbit-1988_frame_199.jpg",
+      "tc": "01:11:33:21",
+      "t_s": 4298.169,
+      "sheet": 2,
+      "pos": [
+        9,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 200,
+      "file": "who-framed-roger-rabbit-1988_frame_200.jpg",
+      "tc": "01:11:42:11",
+      "t_s": 4306.761,
+      "sheet": 2,
+      "pos": [
+        9,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 201,
+      "file": "who-framed-roger-rabbit-1988_frame_201.jpg",
+      "tc": "01:11:52:18",
+      "t_s": 4317.063,
+      "sheet": 3,
+      "pos": [
+        0,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 202,
+      "file": "who-framed-roger-rabbit-1988_frame_202.jpg",
+      "tc": "01:12:02:22",
+      "t_s": 4327.281,
+      "sheet": 3,
+      "pos": [
+        0,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 203,
+      "file": "who-framed-roger-rabbit-1988_frame_203.jpg",
+      "tc": "01:12:12:11",
+      "t_s": 4336.791,
+      "sheet": 3,
+      "pos": [
+        0,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 204,
+      "file": "who-framed-roger-rabbit-1988_frame_204.jpg",
+      "tc": "01:12:21:19",
+      "t_s": 4346.175,
+      "sheet": 3,
+      "pos": [
+        0,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 205,
+      "file": "who-framed-roger-rabbit-1988_frame_205.jpg",
+      "tc": "01:12:35:18",
+      "t_s": 4360.147,
+      "sheet": 3,
+      "pos": [
+        0,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 206,
+      "file": "who-framed-roger-rabbit-1988_frame_206.jpg",
+      "tc": "01:13:20:08",
+      "t_s": 4404.734,
+      "sheet": 3,
+      "pos": [
+        0,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 207,
+      "file": "who-framed-roger-rabbit-1988_frame_207.jpg",
+      "tc": "01:13:33:05",
+      "t_s": 4417.622,
+      "sheet": 3,
+      "pos": [
+        0,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 208,
+      "file": "who-framed-roger-rabbit-1988_frame_208.jpg",
+      "tc": "01:14:00:18",
+      "t_s": 4445.232,
+      "sheet": 3,
+      "pos": [
+        0,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 209,
+      "file": "who-framed-roger-rabbit-1988_frame_209.jpg",
+      "tc": "01:14:17:01",
+      "t_s": 4461.499,
+      "sheet": 3,
+      "pos": [
+        0,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 210,
+      "file": "who-framed-roger-rabbit-1988_frame_210.jpg",
+      "tc": "01:14:32:01",
+      "t_s": 4476.555,
+      "sheet": 3,
+      "pos": [
+        0,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 211,
+      "file": "who-framed-roger-rabbit-1988_frame_211.jpg",
+      "tc": "01:14:44:12",
+      "t_s": 4488.985,
+      "sheet": 3,
+      "pos": [
+        1,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 212,
+      "file": "who-framed-roger-rabbit-1988_frame_212.jpg",
+      "tc": "01:15:04:08",
+      "t_s": 4508.879,
+      "sheet": 3,
+      "pos": [
+        1,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 213,
+      "file": "who-framed-roger-rabbit-1988_frame_213.jpg",
+      "tc": "01:15:23:09",
+      "t_s": 4527.94,
+      "sheet": 3,
+      "pos": [
+        1,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 214,
+      "file": "who-framed-roger-rabbit-1988_frame_214.jpg",
+      "tc": "01:15:46:22",
+      "t_s": 4551.505,
+      "sheet": 3,
+      "pos": [
+        1,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 215,
+      "file": "who-framed-roger-rabbit-1988_frame_215.jpg",
+      "tc": "01:16:09:11",
+      "t_s": 4574.028,
+      "sheet": 3,
+      "pos": [
+        1,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 216,
+      "file": "who-framed-roger-rabbit-1988_frame_216.jpg",
+      "tc": "01:16:32:00",
+      "t_s": 4596.592,
+      "sheet": 3,
+      "pos": [
+        1,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 217,
+      "file": "who-framed-roger-rabbit-1988_frame_217.jpg",
+      "tc": "01:17:13:19",
+      "t_s": 4638.467,
+      "sheet": 3,
+      "pos": [
+        1,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 218,
+      "file": "who-framed-roger-rabbit-1988_frame_218.jpg",
+      "tc": "01:17:24:19",
+      "t_s": 4649.478,
+      "sheet": 3,
+      "pos": [
+        1,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 219,
+      "file": "who-framed-roger-rabbit-1988_frame_219.jpg",
+      "tc": "01:17:41:22",
+      "t_s": 4666.579,
+      "sheet": 3,
+      "pos": [
+        1,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 220,
+      "file": "who-framed-roger-rabbit-1988_frame_220.jpg",
+      "tc": "01:18:00:08",
+      "t_s": 4685.014,
+      "sheet": 3,
+      "pos": [
+        1,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 221,
+      "file": "who-framed-roger-rabbit-1988_frame_221.jpg",
+      "tc": "01:18:15:02",
+      "t_s": 4699.82,
+      "sheet": 3,
+      "pos": [
+        2,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 222,
+      "file": "who-framed-roger-rabbit-1988_frame_222.jpg",
+      "tc": "01:18:45:18",
+      "t_s": 4730.476,
+      "sheet": 3,
+      "pos": [
+        2,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 223,
+      "file": "who-framed-roger-rabbit-1988_frame_223.jpg",
+      "tc": "01:19:04:05",
+      "t_s": 4748.994,
+      "sheet": 3,
+      "pos": [
+        2,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 224,
+      "file": "who-framed-roger-rabbit-1988_frame_224.jpg",
+      "tc": "01:19:17:18",
+      "t_s": 4762.549,
+      "sheet": 3,
+      "pos": [
+        2,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 225,
+      "file": "who-framed-roger-rabbit-1988_frame_225.jpg",
+      "tc": "01:19:35:22",
+      "t_s": 4780.693,
+      "sheet": 3,
+      "pos": [
+        2,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 226,
+      "file": "who-framed-roger-rabbit-1988_frame_226.jpg",
+      "tc": "01:20:04:11",
+      "t_s": 4809.263,
+      "sheet": 3,
+      "pos": [
+        2,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 227,
+      "file": "who-framed-roger-rabbit-1988_frame_227.jpg",
+      "tc": "01:20:21:00",
+      "t_s": 4825.821,
+      "sheet": 3,
+      "pos": [
+        2,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 228,
+      "file": "who-framed-roger-rabbit-1988_frame_228.jpg",
+      "tc": "01:20:56:16",
+      "t_s": 4861.565,
+      "sheet": 3,
+      "pos": [
+        2,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 229,
+      "file": "who-framed-roger-rabbit-1988_frame_229.jpg",
+      "tc": "01:21:29:15",
+      "t_s": 4894.556,
+      "sheet": 3,
+      "pos": [
+        2,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 230,
+      "file": "who-framed-roger-rabbit-1988_frame_230.jpg",
+      "tc": "01:21:49:05",
+      "t_s": 4914.118,
+      "sheet": 3,
+      "pos": [
+        2,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 231,
+      "file": "who-framed-roger-rabbit-1988_frame_231.jpg",
+      "tc": "01:22:10:02",
+      "t_s": 4935.055,
+      "sheet": 3,
+      "pos": [
+        3,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 232,
+      "file": "who-framed-roger-rabbit-1988_frame_232.jpg",
+      "tc": "01:22:27:01",
+      "t_s": 4952.03,
+      "sheet": 3,
+      "pos": [
+        3,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 233,
+      "file": "who-framed-roger-rabbit-1988_frame_233.jpg",
+      "tc": "01:22:36:01",
+      "t_s": 4960.998,
+      "sheet": 3,
+      "pos": [
+        3,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 234,
+      "file": "who-framed-roger-rabbit-1988_frame_234.jpg",
+      "tc": "01:22:55:11",
+      "t_s": 4980.434,
+      "sheet": 3,
+      "pos": [
+        3,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 235,
+      "file": "who-framed-roger-rabbit-1988_frame_235.jpg",
+      "tc": "01:23:05:01",
+      "t_s": 4990.027,
+      "sheet": 3,
+      "pos": [
+        3,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 236,
+      "file": "who-framed-roger-rabbit-1988_frame_236.jpg",
+      "tc": "01:23:14:12",
+      "t_s": 4999.495,
+      "sheet": 3,
+      "pos": [
+        3,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 237,
+      "file": "who-framed-roger-rabbit-1988_frame_237.jpg",
+      "tc": "01:23:28:09",
+      "t_s": 5013.425,
+      "sheet": 3,
+      "pos": [
+        3,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 238,
+      "file": "who-framed-roger-rabbit-1988_frame_238.jpg",
+      "tc": "01:23:38:09",
+      "t_s": 5023.435,
+      "sheet": 3,
+      "pos": [
+        3,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 239,
+      "file": "who-framed-roger-rabbit-1988_frame_239.jpg",
+      "tc": "01:23:48:08",
+      "t_s": 5033.362,
+      "sheet": 3,
+      "pos": [
+        3,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 240,
+      "file": "who-framed-roger-rabbit-1988_frame_240.jpg",
+      "tc": "01:24:01:01",
+      "t_s": 5046.124,
+      "sheet": 3,
+      "pos": [
+        3,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 241,
+      "file": "who-framed-roger-rabbit-1988_frame_241.jpg",
+      "tc": "01:24:16:05",
+      "t_s": 5061.265,
+      "sheet": 3,
+      "pos": [
+        4,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 242,
+      "file": "who-framed-roger-rabbit-1988_frame_242.jpg",
+      "tc": "01:24:27:07",
+      "t_s": 5072.359,
+      "sheet": 3,
+      "pos": [
+        4,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 243,
+      "file": "who-framed-roger-rabbit-1988_frame_243.jpg",
+      "tc": "01:24:36:11",
+      "t_s": 5081.535,
+      "sheet": 3,
+      "pos": [
+        4,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 244,
+      "file": "who-framed-roger-rabbit-1988_frame_244.jpg",
+      "tc": "01:24:45:00",
+      "t_s": 5090.085,
+      "sheet": 3,
+      "pos": [
+        4,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 245,
+      "file": "who-framed-roger-rabbit-1988_frame_245.jpg",
+      "tc": "01:24:55:19",
+      "t_s": 5100.929,
+      "sheet": 3,
+      "pos": [
+        4,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 246,
+      "file": "who-framed-roger-rabbit-1988_frame_246.jpg",
+      "tc": "01:25:06:16",
+      "t_s": 5111.815,
+      "sheet": 3,
+      "pos": [
+        4,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 247,
+      "file": "who-framed-roger-rabbit-1988_frame_247.jpg",
+      "tc": "01:25:23:08",
+      "t_s": 5128.457,
+      "sheet": 3,
+      "pos": [
+        4,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 248,
+      "file": "who-framed-roger-rabbit-1988_frame_248.jpg",
+      "tc": "01:25:33:04",
+      "t_s": 5138.3,
+      "sheet": 3,
+      "pos": [
+        4,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 249,
+      "file": "who-framed-roger-rabbit-1988_frame_249.jpg",
+      "tc": "01:25:47:12",
+      "t_s": 5152.648,
+      "sheet": 3,
+      "pos": [
+        4,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 250,
+      "file": "who-framed-roger-rabbit-1988_frame_250.jpg",
+      "tc": "01:26:01:01",
+      "t_s": 5166.244,
+      "sheet": 3,
+      "pos": [
+        4,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 251,
+      "file": "who-framed-roger-rabbit-1988_frame_251.jpg",
+      "tc": "01:26:13:05",
+      "t_s": 5178.423,
+      "sheet": 3,
+      "pos": [
+        5,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 252,
+      "file": "who-framed-roger-rabbit-1988_frame_252.jpg",
+      "tc": "01:26:22:18",
+      "t_s": 5187.974,
+      "sheet": 3,
+      "pos": [
+        5,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 253,
+      "file": "who-framed-roger-rabbit-1988_frame_253.jpg",
+      "tc": "01:26:36:08",
+      "t_s": 5201.571,
+      "sheet": 3,
+      "pos": [
+        5,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 254,
+      "file": "who-framed-roger-rabbit-1988_frame_254.jpg",
+      "tc": "01:26:45:22",
+      "t_s": 5211.123,
+      "sheet": 3,
+      "pos": [
+        5,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 255,
+      "file": "who-framed-roger-rabbit-1988_frame_255.jpg",
+      "tc": "01:26:58:05",
+      "t_s": 5223.427,
+      "sheet": 3,
+      "pos": [
+        5,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 256,
+      "file": "who-framed-roger-rabbit-1988_frame_256.jpg",
+      "tc": "01:27:07:22",
+      "t_s": 5233.186,
+      "sheet": 3,
+      "pos": [
+        5,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 257,
+      "file": "who-framed-roger-rabbit-1988_frame_257.jpg",
+      "tc": "01:27:19:04",
+      "t_s": 5244.406,
+      "sheet": 3,
+      "pos": [
+        5,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 258,
+      "file": "who-framed-roger-rabbit-1988_frame_258.jpg",
+      "tc": "01:27:32:09",
+      "t_s": 5257.669,
+      "sheet": 3,
+      "pos": [
+        5,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 259,
+      "file": "who-framed-roger-rabbit-1988_frame_259.jpg",
+      "tc": "01:27:41:02",
+      "t_s": 5266.386,
+      "sheet": 3,
+      "pos": [
+        5,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 260,
+      "file": "who-framed-roger-rabbit-1988_frame_260.jpg",
+      "tc": "01:27:52:08",
+      "t_s": 5277.606,
+      "sheet": 3,
+      "pos": [
+        5,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 261,
+      "file": "who-framed-roger-rabbit-1988_frame_261.jpg",
+      "tc": "01:28:02:02",
+      "t_s": 5287.407,
+      "sheet": 3,
+      "pos": [
+        6,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 262,
+      "file": "who-framed-roger-rabbit-1988_frame_262.jpg",
+      "tc": "01:28:22:02",
+      "t_s": 5307.427,
+      "sheet": 3,
+      "pos": [
+        6,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 263,
+      "file": "who-framed-roger-rabbit-1988_frame_263.jpg",
+      "tc": "01:28:31:16",
+      "t_s": 5317.02,
+      "sheet": 3,
+      "pos": [
+        6,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 264,
+      "file": "who-framed-roger-rabbit-1988_frame_264.jpg",
+      "tc": "01:28:41:07",
+      "t_s": 5326.613,
+      "sheet": 3,
+      "pos": [
+        6,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 265,
+      "file": "who-framed-roger-rabbit-1988_frame_265.jpg",
+      "tc": "01:28:56:18",
+      "t_s": 5342.128,
+      "sheet": 3,
+      "pos": [
+        6,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 266,
+      "file": "who-framed-roger-rabbit-1988_frame_266.jpg",
+      "tc": "01:29:07:15",
+      "t_s": 5352.973,
+      "sheet": 3,
+      "pos": [
+        6,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 267,
+      "file": "who-framed-roger-rabbit-1988_frame_267.jpg",
+      "tc": "01:29:24:19",
+      "t_s": 5370.198,
+      "sheet": 3,
+      "pos": [
+        6,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 268,
+      "file": "who-framed-roger-rabbit-1988_frame_268.jpg",
+      "tc": "01:29:33:05",
+      "t_s": 5378.623,
+      "sheet": 3,
+      "pos": [
+        6,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 269,
+      "file": "who-framed-roger-rabbit-1988_frame_269.jpg",
+      "tc": "01:29:44:12",
+      "t_s": 5389.885,
+      "sheet": 3,
+      "pos": [
+        6,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 270,
+      "file": "who-framed-roger-rabbit-1988_frame_270.jpg",
+      "tc": "01:29:52:18",
+      "t_s": 5398.184,
+      "sheet": 3,
+      "pos": [
+        6,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 271,
+      "file": "who-framed-roger-rabbit-1988_frame_271.jpg",
+      "tc": "01:30:06:21",
+      "t_s": 5412.282,
+      "sheet": 3,
+      "pos": [
+        7,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 272,
+      "file": "who-framed-roger-rabbit-1988_frame_272.jpg",
+      "tc": "01:30:21:08",
+      "t_s": 5426.755,
+      "sheet": 3,
+      "pos": [
+        7,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 273,
+      "file": "who-framed-roger-rabbit-1988_frame_273.jpg",
+      "tc": "01:30:37:22",
+      "t_s": 5443.396,
+      "sheet": 3,
+      "pos": [
+        7,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 274,
+      "file": "who-framed-roger-rabbit-1988_frame_274.jpg",
+      "tc": "01:30:47:08",
+      "t_s": 5452.822,
+      "sheet": 3,
+      "pos": [
+        7,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 275,
+      "file": "who-framed-roger-rabbit-1988_frame_275.jpg",
+      "tc": "01:30:56:04",
+      "t_s": 5461.623,
+      "sheet": 3,
+      "pos": [
+        7,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 276,
+      "file": "who-framed-roger-rabbit-1988_frame_276.jpg",
+      "tc": "01:31:06:01",
+      "t_s": 5471.549,
+      "sheet": 3,
+      "pos": [
+        7,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 277,
+      "file": "who-framed-roger-rabbit-1988_frame_277.jpg",
+      "tc": "01:31:18:22",
+      "t_s": 5484.437,
+      "sheet": 3,
+      "pos": [
+        7,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 278,
+      "file": "who-framed-roger-rabbit-1988_frame_278.jpg",
+      "tc": "01:31:27:22",
+      "t_s": 5493.446,
+      "sheet": 3,
+      "pos": [
+        7,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 279,
+      "file": "who-framed-roger-rabbit-1988_frame_279.jpg",
+      "tc": "01:31:37:15",
+      "t_s": 5503.164,
+      "sheet": 3,
+      "pos": [
+        7,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 280,
+      "file": "who-framed-roger-rabbit-1988_frame_280.jpg",
+      "tc": "01:31:47:04",
+      "t_s": 5512.674,
+      "sheet": 3,
+      "pos": [
+        7,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 281,
+      "file": "who-framed-roger-rabbit-1988_frame_281.jpg",
+      "tc": "01:32:01:18",
+      "t_s": 5527.272,
+      "sheet": 3,
+      "pos": [
+        8,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 282,
+      "file": "who-framed-roger-rabbit-1988_frame_282.jpg",
+      "tc": "01:32:21:15",
+      "t_s": 5547.208,
+      "sheet": 3,
+      "pos": [
+        8,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 283,
+      "file": "who-framed-roger-rabbit-1988_frame_283.jpg",
+      "tc": "01:32:32:15",
+      "t_s": 5558.178,
+      "sheet": 3,
+      "pos": [
+        8,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 284,
+      "file": "who-framed-roger-rabbit-1988_frame_284.jpg",
+      "tc": "01:32:50:12",
+      "t_s": 5576.071,
+      "sheet": 3,
+      "pos": [
+        8,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 285,
+      "file": "who-framed-roger-rabbit-1988_frame_285.jpg",
+      "tc": "01:33:01:02",
+      "t_s": 5586.706,
+      "sheet": 3,
+      "pos": [
+        8,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 286,
+      "file": "who-framed-roger-rabbit-1988_frame_286.jpg",
+      "tc": "01:33:09:19",
+      "t_s": 5595.423,
+      "sheet": 3,
+      "pos": [
+        8,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 287,
+      "file": "who-framed-roger-rabbit-1988_frame_287.jpg",
+      "tc": "01:33:22:05",
+      "t_s": 5607.811,
+      "sheet": 3,
+      "pos": [
+        8,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 288,
+      "file": "who-framed-roger-rabbit-1988_frame_288.jpg",
+      "tc": "01:33:32:05",
+      "t_s": 5617.821,
+      "sheet": 3,
+      "pos": [
+        8,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 289,
+      "file": "who-framed-roger-rabbit-1988_frame_289.jpg",
+      "tc": "01:33:48:08",
+      "t_s": 5634.003,
+      "sheet": 3,
+      "pos": [
+        8,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 290,
+      "file": "who-framed-roger-rabbit-1988_frame_290.jpg",
+      "tc": "01:33:58:14",
+      "t_s": 5644.222,
+      "sheet": 3,
+      "pos": [
+        8,
+        9
+      ],
+      "caption": null
+    },
+    {
+      "idx": 291,
+      "file": "who-framed-roger-rabbit-1988_frame_291.jpg",
+      "tc": "01:34:24:22",
+      "t_s": 5670.623,
+      "sheet": 3,
+      "pos": [
+        9,
+        0
+      ],
+      "caption": null
+    },
+    {
+      "idx": 292,
+      "file": "who-framed-roger-rabbit-1988_frame_292.jpg",
+      "tc": "01:34:35:21",
+      "t_s": 5681.551,
+      "sheet": 3,
+      "pos": [
+        9,
+        1
+      ],
+      "caption": null
+    },
+    {
+      "idx": 293,
+      "file": "who-framed-roger-rabbit-1988_frame_293.jpg",
+      "tc": "01:34:48:14",
+      "t_s": 5694.272,
+      "sheet": 3,
+      "pos": [
+        9,
+        2
+      ],
+      "caption": null
+    },
+    {
+      "idx": 294,
+      "file": "who-framed-roger-rabbit-1988_frame_294.jpg",
+      "tc": "01:34:59:12",
+      "t_s": 5705.2,
+      "sheet": 3,
+      "pos": [
+        9,
+        3
+      ],
+      "caption": null
+    },
+    {
+      "idx": 295,
+      "file": "who-framed-roger-rabbit-1988_frame_295.jpg",
+      "tc": "01:35:08:22",
+      "t_s": 5714.667,
+      "sheet": 3,
+      "pos": [
+        9,
+        4
+      ],
+      "caption": null
+    },
+    {
+      "idx": 296,
+      "file": "who-framed-roger-rabbit-1988_frame_296.jpg",
+      "tc": "01:35:20:18",
+      "t_s": 5726.471,
+      "sheet": 3,
+      "pos": [
+        9,
+        5
+      ],
+      "caption": null
+    },
+    {
+      "idx": 297,
+      "file": "who-framed-roger-rabbit-1988_frame_297.jpg",
+      "tc": "01:35:35:19",
+      "t_s": 5741.569,
+      "sheet": 3,
+      "pos": [
+        9,
+        6
+      ],
+      "caption": null
+    },
+    {
+      "idx": 298,
+      "file": "who-framed-roger-rabbit-1988_frame_298.jpg",
+      "tc": "01:35:56:01",
+      "t_s": 5761.839,
+      "sheet": 3,
+      "pos": [
+        9,
+        7
+      ],
+      "caption": null
+    },
+    {
+      "idx": 299,
+      "file": "who-framed-roger-rabbit-1988_frame_299.jpg",
+      "tc": "01:36:09:15",
+      "t_s": 5775.436,
+      "sheet": 3,
+      "pos": [
+        9,
+        8
+      ],
+      "caption": null
+    },
+    {
+      "idx": 300,
+      "file": "who-framed-roger-rabbit-1988_frame_300.jpg",
+      "tc": "01:36:26:15",
+      "t_s": 5792.453,
+      "sheet": 3,
+      "pos": [
+        9,
+        9
+      ],
+      "caption": null
+    }
+  ],
+  "sheets": [
+    {
+      "n": 1,
+      "file": "who-framed-roger-rabbit-1988_sheet_01.jpg",
+      "frame_range": [
+        1,
+        100
+      ]
+    },
+    {
+      "n": 2,
+      "file": "who-framed-roger-rabbit-1988_sheet_02.jpg",
+      "frame_range": [
+        101,
+        200
+      ]
+    },
+    {
+      "n": 3,
+      "file": "who-framed-roger-rabbit-1988_sheet_03.jpg",
+      "frame_range": [
+        201,
+        300
+      ]
+    }
+  ]
+}
