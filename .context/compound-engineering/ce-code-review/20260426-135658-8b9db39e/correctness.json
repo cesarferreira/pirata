@@ -1,0 +1,60 @@
+{
+  "reviewer": "correctness",
+  "run_id": "20260426-135658-8b9db39e",
+  "scope": "plan 008 vote-spread tie-breaker calibration patch (commits 5bef20a + 0d13865)",
+  "findings": [
+    {
+      "id": "correctness-001",
+      "severity": "P3",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "confidence": 0.72,
+      "title": "Same-year guard treats two None start_years as equal, allowing override to fire on year-unknown pairs",
+      "file": "scripts/imdb_kb_enrich.py",
+      "lines": "175-176",
+      "evidence": "Line 175: `if top.start_year != runner.start_year: return matches`. Python evaluates `None != None` as False, so when BOTH matches have start_year=None (year-unknown titles), the guard does NOT short-circuit and execution falls through to the vote-ratio check. If the vote spread happens to be 10x+, the override fires and demotes multi_tie. The plan-008 docstring (line 159) frames the guard as 'prevents overriding genuine year-disambiguation cases like Dune 1984 vs 2021' — but does not address the both-None case. start_year is typed Optional[int] in imdb_lookup.Match, and IMDb's title_basics.startYear is nullable in the source TSV, so this is a reachable input shape.",
+      "trace": "imdb_lookup._make_match returns row['startYear'] verbatim — can be None for upcoming/uncategorized titles. If both top and runner are upcoming-but-same-titled with one having votes (e.g., early-access listings) and other having 0, override would fire on a year-undecided pair. Practical likelihood is low (year-unknown titles rarely accumulate enough votes to clear the 10x ratio against a zero-vote runner with the runner_votes=max(1,0)=1 floor), but logically reachable.",
+      "suggestion": "Tighten the guard to explicitly require both years be present and equal: `if top.start_year is None or runner.start_year is None or top.start_year != runner.start_year: return matches`. This matches the plan's intent ('genuine year-disambiguation cases') by treating year-unknown as 'cannot disambiguate by year, so do not auto-resolve'.",
+      "notes": "Advisory because the 10x ratio with the max(1, ...) floor makes a real-world hit improbable. Surfacing for human judgement on whether to lock down the guard."
+    },
+    {
+      "id": "correctness-002",
+      "severity": "P3",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "confidence": 0.65,
+      "title": "Override fires silently — no audit trail when a multi_tie is demoted to resolved",
+      "file": "scripts/imdb_kb_enrich.py",
+      "lines": "103, 282-308",
+      "evidence": "_apply_vote_tie_breaker mutates matches[0].multi_tie -> False, then resolve() takes the resolved branch (line 128+) and never calls _log_miss. Resolved outcomes are intentionally not logged (line 179 of test asserts this). Net effect: when the override fires, there is no record in logs/sweep_imdb_misses.log that imdb_lookup originally flagged a tie. If TIE_BREAK_VOTE_RATIO=10 is later found to be miscalibrated (e.g., flipping a legitimate ambiguity to wrong tconst), the audit trail to detect drift is missing.",
+      "trace": "Mario Galaxy, Roger Rabbit, and any future case that hits this path will simply emit a resolved manifest with multi_tie=False and no breadcrumb that the override fired versus the natural-resolved path. Calibration follow-up requires re-running the resolve over all manifests with logging instrumentation.",
+      "suggestion": "Optional: add a sentinel field to the assembled imdb block (e.g., 'tie_break_applied': True) when override fires, OR log a separate JSONL line tagged 'tie_break_override' with top.tconst, runner.tconst, top.num_votes, runner.num_votes. Skip if the simplicity-first principle outweighs observability here.",
+      "notes": "Pure observability concern — does not affect functional correctness. Listed P3/advisory."
+    },
+    {
+      "id": "correctness-003",
+      "severity": "P3",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "confidence": 0.60,
+      "title": "Override is title-type agnostic — could auto-resolve genuine same-year movie-vs-movie pairs at 10x+ vote spread",
+      "file": "scripts/imdb_kb_enrich.py",
+      "lines": "146-180",
+      "evidence": "Helper inspects only same-year + vote ratio. The plan rationale (docstring lines 150-153) cites videoGame/tvEpisode noise as the target, but the helper does not gate on title_type. A scenario like a major same-year remake (movie A, 100k votes) vs a less-known same-year independent film (movie B, 5k votes) at the same start_year would clear the 10x threshold and auto-resolve to A. Whether this is the desired behavior is a calibration judgement.",
+      "trace": "imdb_lookup's multi_tie is set when both are tier-1 within 15% score gap. If that gap is hit by two legitimate same-year movies, the override would now silently pick the more-popular one. This is what plan 008 calls 'preserving genuine same-fame ambiguity (<10x)' (line 49) — the assumption is that real ambiguity polls roughly equally. The assumption holds for the cited examples but is not enforced by the code.",
+      "suggestion": "Optional: add a title_type filter that fires the override only when runner.title_type in {videoGame, tvEpisode, short, video}, matching the plan's stated noise sources. Trade-off: more conservative (less drift risk) vs less coverage. Skip if calibration data shows 10x ratio alone is sufficient.",
+      "notes": "Design judgement, not a bug. The 10x threshold is conservative enough that real-world same-year-same-fame movie pairs would rarely clear it."
+    }
+  ],
+  "residual_risks": [
+    "Threshold tuning (TIE_BREAK_VOTE_RATIO=10) is empirically picked from 2 observed cases (Roger Rabbit 1110x, Mario Galaxy infinity). No statistical sweep across the IMDb catalogue confirms 10x is the right cutoff. Future calibration drift possible if a corner case emerges between 5x-15x.",
+    "Helper does not handle the case where matches has length 2 but the runner is itself a tier-2 fuzzy hit (fuzz_ratio < 100). imdb_lookup's multi_tie flag requires both to be tier-1, so in practice top.multi_tie=True implies runner is tier-1, but the helper does not re-check. Silent dependency on imdb_lookup's invariant.",
+    "If imdb_lookup ever changes its multi_tie semantics (e.g., extends to tier-2 ties), the helper's same-year guard might no longer match the cases it was designed to handle. This is a contract-coupling risk between the two modules."
+  ],
+  "testing_gaps": [
+    "No test for both-None start_year pair (correctness-001 scenario). T14 covers year-mismatch (different ints) but not the None-equality edge case.",
+    "No test verifying that an override case where runner is tier-2 (fuzz_ratio<100) behaves correctly. In practice imdb_lookup never sets top.multi_tie=True when runner is tier-2, so the path is unreachable from real DB calls — but the helper accepts arbitrary Match input and could be exercised from elsewhere.",
+    "No regression test confirming that the override does NOT fire when top.multi_tie is False (the early-return guard). T16 covers single-match short-circuit and T13 covers ratio-too-low, but no synthetic test exercises the `if not top.multi_tie` branch explicitly. Minor gap; the guard is trivially correct.",
+    "No test confirming the input list is unmutated when override fires (the docstring claims 'input list unchanged'). Helper builds a new list via `[replace(top, ...)] + list(matches[1:])` — slicing creates a copy, but mutating matches[0] in-place is not what happens, so the claim holds. A defensive test that asserts `id(matches) != id(result)` and `original[0].multi_tie is True` after the call would lock the contract."
+  ]
+}

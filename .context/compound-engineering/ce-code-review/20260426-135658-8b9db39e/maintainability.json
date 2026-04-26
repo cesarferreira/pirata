@@ -1,0 +1,135 @@
+{
+  "reviewer": "maintainability",
+  "run_id": "20260426-135658-8b9db39e",
+  "scope": {
+    "plan": "docs/plans/2026-04-26-008-fix-imdb-vote-tie-breaker-plan.md",
+    "files_reviewed": [
+      "/Users/vidigal/claude-code/pirata/scripts/imdb_kb_enrich.py",
+      "/Users/vidigal/claude-code/pirata/scripts/tests/test_imdb_kb_enrich.sh",
+      "/Users/vidigal/claude-code/pirata/docs/plans/2026-04-26-007-feat-imdb-kb-enrichment-plan.md",
+      "/Users/vidigal/claude-code/pirata/docs/plans/2026-04-26-008-fix-imdb-vote-tie-breaker-plan.md"
+    ]
+  },
+  "findings": [
+    {
+      "id": "M-008-1",
+      "category": "naming",
+      "severity": "info",
+      "confidence": 0.85,
+      "title": "TIE_BREAK_VOTE_RATIO is well-named and consistent with sibling constants",
+      "location": "scripts/imdb_kb_enrich.py:46-49",
+      "evidence": "TIE_BREAK_VOTE_RATIO sits alongside IMDB_CONFIDENCE_PCT and AKAS_CAP. The name encodes domain (TIE_BREAK), unit (VOTE_RATIO) and reads as a multiplier without ambiguity. The two-line trailing comment names the threshold rationale (Roger Rabbit 1110x, Mario Galaxy infinity) which doubles as a regression-corpus marker.",
+      "recommendation": "No change. This is a positive observation — naming and placement match the existing module conventions and the constant is genuinely tunable in one place."
+    },
+    {
+      "id": "M-008-2",
+      "category": "naming",
+      "severity": "info",
+      "confidence": 0.78,
+      "title": "_apply_vote_tie_breaker names the WHAT, not the HOW — appropriate verb-object form",
+      "location": "scripts/imdb_kb_enrich.py:146",
+      "evidence": "The helper is named for what it accomplishes (apply a vote-spread tie-breaker) rather than for the mechanism (e.g., _demote_top_multi_tie or _replace_top_flag). This is the better axis for future readers — they search for 'tie-breaker' when debugging multi_tie outcomes, not for 'replace top'.",
+      "recommendation": "No change."
+    },
+    {
+      "id": "M-008-3",
+      "category": "module_organization",
+      "severity": "low",
+      "confidence": 0.65,
+      "title": "Helper ordering: _apply_vote_tie_breaker sits between resolve() and _parse_filename, splitting the private-helper cluster",
+      "location": "scripts/imdb_kb_enrich.py:146 vs 183/205/244/282",
+      "evidence": "Top-level definitions are: ResolutionResult (54), resolve (65), _apply_vote_tie_breaker (146), _parse_filename (183), _get_directors (205), _assemble_imdb_block (244), _log_miss (282), _main (311). _apply_vote_tie_breaker is placed immediately after resolve(), but the four pre-existing private helpers (_parse_filename, _get_directors, _assemble_imdb_block, _log_miss) form a contiguous block at 183-309. The new helper interrupts the natural ordering (which appears to be: callsite-order inside resolve()). _parse_filename runs first in resolve(), then lookup_by_title (external), then _apply_vote_tie_breaker, then _assemble_imdb_block + _get_directors + _log_miss. By that callsite-order rule, _apply_vote_tie_breaker IS in the correct slot. Calling this 'low' rather than ignored because the ordering is non-obvious without reading resolve() top-to-bottom — a future maintainer might wonder why the new helper jumped the queue.",
+      "recommendation": "No change required. If a future refactor groups helpers, consider a one-line section comment (e.g. '# --- private helpers, ordered by call-site in resolve() ---') to document the convention. Not blocking."
+    },
+    {
+      "id": "M-008-4",
+      "category": "docstring_quality",
+      "severity": "info",
+      "confidence": 0.82,
+      "title": "Helper docstring covers all four guard rationales + tuning instruction",
+      "location": "scripts/imdb_kb_enrich.py:147-169",
+      "evidence": "The docstring explicitly explains: (1) why the override exists (catalogue noise vs score-only heuristic), (2) all four guard conditions with rationale (same-year guard prevents Dune 1984 vs 2021 collision; max(1,...) avoids div-by-zero), (3) the override's effect on multi_tie (top demoted, runner intact), (4) tuning location (TIE_BREAK_VOTE_RATIO at module level, lower=more aggressive). Concrete examples (Roger Rabbit, Mario Galaxy) anchor the abstract description.",
+      "recommendation": "No change. This is reference-quality documentation for a calibration patch."
+    },
+    {
+      "id": "M-008-5",
+      "category": "coupling",
+      "severity": "info",
+      "confidence": 0.88,
+      "title": "New dependency on dataclasses.replace + imdb_lookup.Match is appropriate and minimal",
+      "location": "scripts/imdb_kb_enrich.py:25,42",
+      "evidence": "The patch adds `replace` to the existing `from dataclasses import asdict, dataclass` line (no new import line). Match was already imported at line 42. No new module-level dependencies introduced. The `replace` pattern is documented in plan 008 as already-used in imdb_lookup.lookup_by_title for the same flag, so the idiom is consistent across both layers.",
+      "recommendation": "No change."
+    },
+    {
+      "id": "M-008-6",
+      "category": "indirection",
+      "severity": "info",
+      "confidence": 0.85,
+      "title": "Integration site in resolve() is clean — single line + adequate inline rationale",
+      "location": "scripts/imdb_kb_enrich.py:96-103",
+      "evidence": "The override is invoked at line 103 with 7 lines of preceding comment that name the problem (score-based heuristic ignores numVotes), the trigger (catalog noise: videoGames, tvEpisodes), and the effect (resolved path runs, manifest gains full enrichment). The comment does NOT duplicate the helper's docstring — it explains the WHY at the call site, leaving the WHAT to the helper. Two-tier comment strategy is correct.",
+      "recommendation": "No change."
+    },
+    {
+      "id": "M-008-7",
+      "category": "reversibility",
+      "severity": "info",
+      "confidence": 0.90,
+      "title": "Override is genuinely one-line revertible — not a feature-flag-in-disguise",
+      "location": "scripts/imdb_kb_enrich.py:46",
+      "evidence": "Setting TIE_BREAK_VOTE_RATIO = 999999 (or any sufficiently large int) effectively disables the override for all real-world data. The helper short-circuits via the `top.num_votes < TIE_BREAK_VOTE_RATIO * runner_votes` comparison — no special-case for 'disabled', the math just always returns matches unchanged. This is more robust than a boolean flag because it preserves the same code path under a tunable threshold.",
+      "recommendation": "No change. The constant-as-tuning-knob pattern is the right shape here. Plan 008's reversibility claim is honored by the implementation."
+    },
+    {
+      "id": "M-008-8",
+      "category": "test_DRY",
+      "severity": "moderate",
+      "confidence": 0.75,
+      "title": "Synthetic Match factory `mk(...)` is copy-pasted across T13/T14/T15, slightly diverging in T16",
+      "location": "scripts/tests/test_imdb_kb_enrich.sh:234-240, 261-267, 288-294, 314-317",
+      "evidence": "T13, T14, T15 each define an identical local `mk(tconst, votes, year=2020|year, multi_tie=True)` factory inside their own python heredoc. T16 inlines the Match construction directly without the factory. Roughly 21 lines of factory definition are duplicated three times. The duplication is bash-test-fixture style (each heredoc is a self-contained invocation), so a shared helper would need to live OUTSIDE the heredoc — either as a module-level test fixture in a Python test file, or as a shared shell-level here-string. Within the bash-test idiom, this duplication is conventional; across a longer test suite it becomes a drift risk (T13/T14 factories already differ in default year handling — T13/T15 use `year=2020`, T14 makes year required).",
+      "recommendation": "Acceptable for v1. If a T17+ test gets added that needs a fifth `mk` definition, consider extracting a `scripts/tests/fixtures/imdb_kb_enrich_mk.py` module imported by each heredoc via `from imdb_kb_enrich_mk import mk`. Alternative: collapse T13+T14+T15+T16 into a single heredoc with one factory and four assertions printed sequentially (loses per-test isolation but cuts ~60 duplicated lines). Not blocking; flag for the next test-suite refactor."
+    },
+    {
+      "id": "M-008-9",
+      "category": "dead_code",
+      "severity": "info",
+      "confidence": 0.95,
+      "title": "No orphan or dead helpers introduced by the patch",
+      "location": "scripts/imdb_kb_enrich.py",
+      "evidence": "_apply_vote_tie_breaker has exactly one caller (resolve at line 103). All other helpers retain their callsites. No commented-out code, no unreachable branches, no flag-guarded dead paths. The patch is purely additive and every line is reachable.",
+      "recommendation": "No change."
+    },
+    {
+      "id": "M-008-10",
+      "category": "cross_reference",
+      "severity": "info",
+      "confidence": 0.80,
+      "title": "Plan 007 annotation is well-placed but verbose for a one-line reference",
+      "location": "docs/plans/2026-04-26-007-feat-imdb-kb-enrichment-plan.md:56",
+      "evidence": "The annotation is embedded inline in the existing 'Confidence threshold re-calibration' bullet. It runs ~120 words (not one line as the prompt described), but the verbosity is justified: it names the resolution date, plan path, the trigger evidence (Roger Rabbit + Mario Galaxy), the constant (TIE_BREAK_VOTE_RATIO=10), the same-year guard, and explicitly reasserts that imdb_lookup's 15% threshold is unchanged. This anti-Chesterton-fence framing prevents a future reader from assuming plan 008 obviated the original 15% knob.",
+      "recommendation": "No change. The placement (inside the existing follow-up bullet) is the right anchor — a future reader auditing the 15% threshold will encounter plan 008's resolution at the same line. Alternative placements (e.g., adding a 'Resolved follow-ups' section at plan-end) would require the reader to know to look there."
+    },
+    {
+      "id": "M-008-11",
+      "category": "defensive_code",
+      "severity": "low",
+      "confidence": 0.70,
+      "title": "Helper defensively handles None for num_votes despite plan 008 stating 'v1 trusts the dataclass shape'",
+      "location": "scripts/imdb_kb_enrich.py:177-178",
+      "evidence": "Plan 008 line 218 says: 'If Match.num_votes is somehow None (shouldn't be — int field with default 0), max(1, None) would TypeError; defensive code path would be max(1, top.num_votes or 0). v1 trusts the dataclass shape.' But the implementation uses `runner.num_votes or 0` and `top.num_votes or 0` defensively at lines 177-178. The implementation is MORE defensive than the plan committed to. This is fine — extra robustness is a positive — but worth noting that plan and code drifted. A future maintainer reading both might wonder which is authoritative.",
+      "recommendation": "Either (a) remove the `or 0` guards to match the plan's 'trust the dataclass' stance, or (b) update plan 008's System-Wide Impact paragraph to acknowledge the implementation chose defense-in-depth. Option (b) is lower-risk. Not blocking — code is correct under both interpretations."
+    }
+  ],
+  "residual_risks": [
+    "If the test suite grows past T16 with more synthetic Match fixtures, the duplicated `mk(...)` factory pattern across heredocs will become a drift hotspot. Already noted in M-008-8.",
+    "The two-tier comment strategy (call-site comment + helper docstring) requires both to stay in sync. If TIE_BREAK_VOTE_RATIO is ever re-tuned, both the docstring threshold examples and the call-site Roger Rabbit / Mario Galaxy citations will need a refresh. No automated link enforces this.",
+    "The override silently changes which tconst lands in the per-movie JSON without an audit field on the imdb block (plan 008 explicitly deferred `imdb.tie_break_applied`). If a future bug surfaces where the override picked the wrong tconst, post-hoc debugging requires re-running resolve() with logging — the manifest itself doesn't carry the trail. Acceptable for v1 per plan."
+  ],
+  "testing_gaps": [
+    "No test asserts that the runner's multi_tie flag is left intact across the full resolve() path (T15 asserts it at the helper level only — that the runner.multi_tie stays True after _apply_vote_tie_breaker). Since resolve() only inspects the top, this is academic, but if a future caller iterates matches[1:], the invariant matters.",
+    "No test exercises the `len(matches) >= 2 but matches[0].multi_tie == False` short-circuit explicitly — T13/T14/T15 all start with multi_tie=True. A T17 covering the 'already-resolved top' path would lock the early-return guard against future refactors.",
+    "No regression test for a 3+ match list. All synthetic tests use exactly 2 matches. The helper's `[replace(top, multi_tie=False)] + list(matches[1:])` correctly handles 3+ via list slicing, but no test proves it. Low-risk because real imdb_lookup output frequently has 3+ matches and T11/T12 (real DB) implicitly cover this — but the assertion isn't explicit."
+  ]
+}

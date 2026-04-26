@@ -1,0 +1,168 @@
+{
+  "run_id": "20260426-135658-8b9db39e",
+  "mode": "autofix",
+  "scope": {
+    "base": "HEAD~2",
+    "head_at_dispatch": "0d13865",
+    "files_changed": 12,
+    "lines_added": 798,
+    "lines_removed": 46,
+    "plan": "docs/plans/2026-04-26-008-fix-imdb-vote-tie-breaker-plan.md",
+    "plan_source": "explicit"
+  },
+  "intent": "Plan 008 calibration patch on IMDb KB enrichment helper. Adds Unit-3-layer override that demotes multi_tie -> resolved when top match has overwhelming numVotes dominance over runner-up at the same start_year. Goal: famous-vs-obscure same-title pairs (Roger Rabbit 1988 movie 233k votes vs same-name 1988 video game 210 votes; Mario Galaxy 2026 movie 38k votes vs zero-vote tvEpisodes) resolve to the famous one instead of falling through to the bare-wrapper path.",
+  "reviewers_dispatched": [
+    "review:ce-correctness-reviewer",
+    "review:ce-testing-reviewer",
+    "review:ce-maintainability-reviewer"
+  ],
+  "reviewers_skipped": [
+    "ce-agent-native-reviewer (no new agent surface added)",
+    "ce-learnings-researcher (no docs/solutions/ directory in repo)",
+    "ce-project-standards-reviewer (well-followed convention; small scope)",
+    "all conditional personas (no security/perf/api-contract/migrations/CLI/auth touched)"
+  ],
+  "merged_findings": [
+    {
+      "id": "merged-001",
+      "title": "Both start_year=None — same-year guard evaluates None==None as True (override fires)",
+      "severity": "P3",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "confidence": 0.82,
+      "file": "scripts/imdb_kb_enrich.py",
+      "line": 175,
+      "reviewers": ["correctness", "testing"],
+      "agreement_boost": true,
+      "applied_fix": "Added T18 to test_imdb_kb_enrich.sh — locks in current semantics (override fires when both years are None and votes are dominant)."
+    },
+    {
+      "id": "merged-002",
+      "title": "not-multi_tie short-circuit branch (top.multi_tie=False) untested in isolation",
+      "severity": "P3",
+      "autofix_class": "safe_auto",
+      "owner": "review-fixer",
+      "confidence": 0.80,
+      "file": "scripts/imdb_kb_enrich.py",
+      "line": 173,
+      "reviewers": ["testing", "maintainability"],
+      "agreement_boost": true,
+      "applied_fix": "Added T17 to test_imdb_kb_enrich.sh — asserts helper passes through input unchanged when top.multi_tie=False even with vote-dominant same-year matches."
+    },
+    {
+      "id": "merged-003",
+      "title": "Helper-level idempotency + input non-mutation untested",
+      "severity": "P3",
+      "autofix_class": "safe_auto",
+      "owner": "review-fixer",
+      "confidence": 0.65,
+      "file": "scripts/tests/test_imdb_kb_enrich.sh",
+      "line": 233,
+      "reviewers": ["testing"],
+      "applied_fix": "Added T19 to test_imdb_kb_enrich.sh — verifies input list unmutated after override fires AND second call produces identical outcome."
+    },
+    {
+      "id": "merged-004",
+      "title": "Override has no audit trail — no field on imdb block records 'tie-break applied'",
+      "severity": "P3",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "confidence": 0.65,
+      "file": "scripts/imdb_kb_enrich.py",
+      "line": 103,
+      "reviewers": ["correctness", "maintainability"],
+      "agreement_boost": true,
+      "applied_fix": null,
+      "note": "Plan 008 explicitly deferred this audit field. Documented in plan's Open Questions section. Re-evaluate if calibration becomes contentious."
+    },
+    {
+      "id": "merged-005",
+      "title": "Override is title-type agnostic — could auto-resolve genuine same-year movie-vs-movie pairs at 10x+ vote spread",
+      "severity": "P3",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "confidence": 0.60,
+      "file": "scripts/imdb_kb_enrich.py",
+      "line": 146,
+      "reviewers": ["correctness"],
+      "applied_fix": null,
+      "note": "Plan 008 explicitly skipped a kind/titleType filter (M2 from Unit A discussion). Documented as Phase-2 follow-up if a real example surfaces."
+    },
+    {
+      "id": "merged-006",
+      "title": "T4 Dune integration scenario depends on IMDb DB topology (Lynch 1984 + Villeneuve 2021 staying tier-1 ties)",
+      "severity": "P3",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "confidence": 0.62,
+      "file": "scripts/tests/test_contact_sheet_imdb.sh",
+      "line": 142,
+      "reviewers": ["testing"],
+      "applied_fix": null,
+      "note": "T14 carries the load-bearing year-guard assertion in isolation (synthetic). T4 is integration-layer redundant safety net. Acceptable risk."
+    },
+    {
+      "id": "merged-007",
+      "title": "mk(...) factory copy-pasted across T13/T14/T15/T17/T18/T19 — could DRY",
+      "severity": "P2",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "confidence": 0.75,
+      "file": "scripts/tests/test_imdb_kb_enrich.sh",
+      "line": 234,
+      "reviewers": ["maintainability"],
+      "applied_fix": null,
+      "note": "Acceptable for v1; on next test-suite refactor extract scripts/tests/fixtures/imdb_kb_enrich_mk.py or collapse into single heredoc with shared factory. Not blocking."
+    },
+    {
+      "id": "merged-008",
+      "title": "Plan 008 System-Wide Impact paragraph claims v1 trusts dataclass shape but code uses defensive `or 0` guards on num_votes — minor plan/code drift",
+      "severity": "P3",
+      "autofix_class": "advisory",
+      "owner": "human",
+      "confidence": 0.70,
+      "file": "scripts/imdb_kb_enrich.py",
+      "line": 177,
+      "reviewers": ["maintainability"],
+      "applied_fix": null,
+      "note": "Defense-in-depth; lower-risk than removing the guards. Plan 008 could be annotated to acknowledge the guards as belt-and-suspenders. Not blocking."
+    }
+  ],
+  "applied_fixes": [
+    {
+      "finding_ids": ["merged-002", "merged-003"],
+      "file": "scripts/tests/test_imdb_kb_enrich.sh",
+      "summary": "Added T17 (not-multi_tie short-circuit), T18 (both years None edge), T19 (idempotency + non-mutation). PASS count grew from 48 to 54.",
+      "verification": "bash scripts/tests/test_imdb_kb_enrich.sh -> 54/54 PASS"
+    }
+  ],
+  "residual_actionable_work": [],
+  "advisory_findings": [
+    "merged-001 (None==None year-guard semantics — locked in via T18)",
+    "merged-004 (override audit-trail; deferred per plan 008)",
+    "merged-005 (titleType agnosticism; deferred per plan 008)",
+    "merged-006 (Dune integration test fragility; T14 is durable backup)",
+    "merged-007 (mk(...) factory DRY; future refactor)",
+    "merged-008 (plan/code drift on `or 0` guards)"
+  ],
+  "residual_risks": [
+    "TIE_BREAK_VOTE_RATIO=10 boundary untested at exact threshold (9x, 10x, 11x). T13 pins 5x->preserve and T15/T19 pin 200x/1000x->fire; mid-range calibration drift would not be caught.",
+    "Real-DB T5/T11 couple suite to current IMDb dataset. Synthetic T13-T19 are the durable safety net.",
+    "Override silently swaps tconst without an audit field on the imdb block (deferred per plan 008); post-hoc debugging requires re-running resolve()."
+  ],
+  "testing_gaps_remaining": [
+    "Threshold boundary (~10x exact) values untested; only sub-threshold (5x) and dominant (200x+) anchored.",
+    "No end-to-end test asserts runner.multi_tie remains True after a full resolve() (T15 covers it only at helper level)."
+  ],
+  "test_suite_state": {
+    "test_imdb_lookup": "25/25 PASS",
+    "test_imdb_kb_enrich": "54/54 PASS (was 48; gained +6 from T17/T18/T19)",
+    "test_kh_export": "54/54 PASS",
+    "test_sweep": "15/15 PASS",
+    "test_contact_sheet_imdb": "26/26 PASS",
+    "test_queue_wrap": "8/8 PASS",
+    "total": "182/182 PASS"
+  },
+  "verdict": "Ready to merge",
+  "verdict_reasoning": "Zero P0/P1/P2 findings (one P2 advisory on test factory DRY is acceptable for v1). All P3 findings are advisories (deferred design decisions documented in plan 008) or were resolved by safe_auto test additions. Plan 008 requirements R1-R11 all satisfied; plan-source explicit. Cross-reviewer agreement on the two safe_auto findings (testing + maintainability convergence on missing branch coverage; correctness + testing convergence on None-year semantics) increased confidence in the diagnoses, both of which were applied as test additions."
+}

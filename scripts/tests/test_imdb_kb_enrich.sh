@@ -323,6 +323,99 @@ PYEOF
 expect_in "16.single-match returns len 1"        'len: 1'                              "$out"
 expect_in "16.single-match flag unchanged"       'top_multi_tie: True'                 "$out"
 
+# ---------------------------------------------------------------- T17 ------
+# Post-review (plan 008 ce-code-review): not-multi_tie short-circuit. The
+# helper's first guard returns matches unchanged when top.multi_tie is
+# already False — this branch is exercised indirectly by resolved real-DB
+# scenarios but not asserted in isolation. Lock the invariant.
+echo "=== T17: not-multi_tie short-circuit (helper no-ops) ==="
+out=$(python3 - <<'PYEOF'
+import sys
+sys.path.insert(0, "scripts")
+import imdb_kb_enrich
+Match = imdb_kb_enrich.Match
+
+def mk(tconst, votes, multi_tie):
+    return Match(
+        tconst=tconst, primary_title="X", original_title="X",
+        title_type="movie", start_year=2020, score=300.0, field="primary",
+        matched_text="X", fuzz_ratio=100.0, num_votes=votes,
+        average_rating=7.0, multi_tie=multi_tie,
+    )
+
+# top.multi_tie=False, even with overwhelming vote spread same-year.
+# Helper must not promote a clean match to anything; it only demotes.
+inp = [mk("tt001", 50000, multi_tie=False), mk("tt002", 5, multi_tie=False)]
+result = imdb_kb_enrich._apply_vote_tie_breaker(inp)
+print("top_multi_tie:", result[0].multi_tie)
+print("identical_to_input:", result is inp or result == inp)
+PYEOF
+)
+expect_in "17.no-multi_tie short-circuit"        'top_multi_tie: False'                "$out"
+expect_in "17.input passed through unchanged"    'identical_to_input: True'            "$out"
+
+# ---------------------------------------------------------------- T18 ------
+# Post-review: both start_year=None edge. Python `None == None` is True, so
+# the same-year guard treats two None-year matches as "same year" — override
+# proceeds to vote check. This locks in current behavior so a future change
+# adding explicit None handling surfaces here.
+echo "=== T18: both start_year=None — guard treats as same year ==="
+out=$(python3 - <<'PYEOF'
+import sys
+sys.path.insert(0, "scripts")
+import imdb_kb_enrich
+Match = imdb_kb_enrich.Match
+
+def mk(tconst, votes):
+    return Match(
+        tconst=tconst, primary_title="X", original_title="X",
+        title_type="movie", start_year=None, score=300.0, field="primary",
+        matched_text="X", fuzz_ratio=100.0, num_votes=votes,
+        average_rating=7.0, multi_tie=True,
+    )
+
+# Both years None; vote spread 1000x → override fires (Python's
+# None == None evaluates True). Documents the current semantics.
+result = imdb_kb_enrich._apply_vote_tie_breaker([mk("tt001", 1000), mk("tt002", 1)])
+print("top_multi_tie:", result[0].multi_tie)
+PYEOF
+)
+expect_in "18.both years None — override fires" 'top_multi_tie: False'                 "$out"
+
+# ---------------------------------------------------------------- T19 ------
+# Post-review: helper-level idempotency + non-mutation invariant.
+# The helper builds a new list via dataclasses.replace; the input list
+# must remain untouched, and re-applying produces the same demoted top.
+echo "=== T19: idempotency + non-mutation ==="
+out=$(python3 - <<'PYEOF'
+import sys
+sys.path.insert(0, "scripts")
+import imdb_kb_enrich
+Match = imdb_kb_enrich.Match
+
+def mk(tconst, votes):
+    return Match(
+        tconst=tconst, primary_title="X", original_title="X",
+        title_type="movie", start_year=2020, score=300.0, field="primary",
+        matched_text="X", fuzz_ratio=100.0, num_votes=votes,
+        average_rating=7.0, multi_tie=True,
+    )
+
+inp = [mk("tt001", 1000), mk("tt002", 5)]
+input_top_flag_before = inp[0].multi_tie
+out1 = imdb_kb_enrich._apply_vote_tie_breaker(inp)
+input_top_flag_after_first = inp[0].multi_tie
+# Second call on a fresh equivalent input — outcome identical.
+out2 = imdb_kb_enrich._apply_vote_tie_breaker([mk("tt001", 1000), mk("tt002", 5)])
+print("input_unmutated:", input_top_flag_before == input_top_flag_after_first == True)
+print("idempotent_top_flag:", out1[0].multi_tie == out2[0].multi_tie == False)
+print("idempotent_tconsts:", out1[0].tconst == out2[0].tconst == "tt001")
+PYEOF
+)
+expect_in "19.input list unmutated"              'input_unmutated: True'               "$out"
+expect_in "19.idempotent top.multi_tie"          'idempotent_top_flag: True'           "$out"
+expect_in "19.idempotent tconst preservation"    'idempotent_tconsts: True'            "$out"
+
 # ---------------------------------------------------------------- summary --
 echo
 echo "=== summary ==="

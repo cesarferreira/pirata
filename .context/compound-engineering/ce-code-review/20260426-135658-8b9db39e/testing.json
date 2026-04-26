@@ -1,0 +1,59 @@
+{
+  "reviewer": "testing",
+  "findings": [
+    {
+      "id": "testing-001",
+      "severity": "low",
+      "confidence": 0.78,
+      "category": "missing_edge_case_coverage",
+      "title": "not-multi_tie early-return branch is uncovered as a unit case",
+      "file": "scripts/imdb_kb_enrich.py",
+      "line_range": "173-174",
+      "evidence": "_apply_vote_tie_breaker has a branch `if not top.multi_tie: return matches` that is not directly exercised by any of T13-T16. T13 (5x ratio), T14 (year mismatch), T15 (zero-runner fires), T16 (len<2) cover the other four branches but skip the multi_tie=False short-circuit. In practice resolve() only calls the helper when matches were produced and the score-tie heuristic ran; happy-path T1/T2/T3 (Mufasa/Frankenstein/Mario) pass with single resolved matches that don't carry multi_tie=True, so the branch is exercised indirectly via integration but not asserted in isolation.",
+      "recommendation": "Add a 7-line synthetic case (call it T17) that builds two same-year vote-dominant Match instances with top.multi_tie=False and asserts the helper returns the input list unchanged (top.multi_tie still False, no replace() collateral). Cheap insurance against a future refactor accidentally clearing the guard."
+    },
+    {
+      "id": "testing-002",
+      "severity": "low",
+      "confidence": 0.72,
+      "category": "missing_edge_case_coverage",
+      "title": "Both-years-None edge case for the year guard is untested",
+      "file": "scripts/imdb_kb_enrich.py",
+      "line_range": "175-176",
+      "evidence": "start_year is Optional[int] in the Match dataclass. When both top and runner have start_year=None, the guard `top.start_year != runner.start_year` evaluates None != None → False, so the override would proceed to the vote-ratio check. This is a plausible edge (IMDb has rows with missing startYear). No test covers it. The behavior is arguably correct (no year info means no year-disambiguation signal, so vote spread is a fine tie-breaker), but it is undocumented and untested — a future maintainer reading the docstring 'same-year guard prevents overriding genuine year-disambiguation cases' might reasonably assume None != None should short-circuit and 'fix' it, breaking the current contract.",
+      "recommendation": "Either (a) add a synthetic T18 that sets start_year=None on both matches and asserts override fires, locking in the current behavior, or (b) explicitly handle None in the guard (e.g., `if top.start_year is None or runner.start_year is None: return matches`) and cover that path. Option (a) is cheaper and matches the spirit of plan 008 (vote dominance is the override signal, year is the suppressor)."
+    },
+    {
+      "id": "testing-003",
+      "severity": "low",
+      "confidence": 0.65,
+      "category": "missing_edge_case_coverage",
+      "title": "Helper-level idempotency not asserted (only export-layer T7 covers it)",
+      "file": "scripts/tests/test_imdb_kb_enrich.sh",
+      "line_range": "T13-T16",
+      "evidence": "The user-listed focus area #7 asks whether re-running the helper on the same input yields the same outcome. test_contact_sheet_imdb T7 covers idempotency at the export layer (full pipeline) but no synthetic test calls _apply_vote_tie_breaker twice on the same input list. The function uses dataclasses.replace() and returns a new list, so it is structurally idempotent, but a trivial assertion would catch a future bug where someone introduces in-place mutation of the input list (e.g., switching to `matches[0] = replace(...)`).",
+      "recommendation": "Extend T15 with two extra lines: call _apply_vote_tie_breaker twice on the same input, assert the second call's top.multi_tie is False AND that the original input list's matches[0].multi_tie is still True (verifies non-mutation). One Python block, ~5 lines added."
+    },
+    {
+      "id": "testing-004",
+      "severity": "low",
+      "confidence": 0.62,
+      "category": "brittle_test",
+      "title": "T4 Dune scenario stability depends on IMDb DB year-disambiguation surviving",
+      "file": "scripts/tests/test_contact_sheet_imdb.sh",
+      "line_range": "142-158",
+      "evidence": "T4 was flipped from Roger Rabbit (a now-resolved case) to Dune-without-year as the new multi_tie integration vehicle. The test relies on the live IMDb DB returning Lynch 1984 + Villeneuve 2021 as tier-1 score ties with different start_years so the year guard fires. If a future DB refresh introduces a third tier-1 Dune (e.g., a 2024 Dune Part Two re-listing with primaryTitle == 'Dune' and ratings drift), the year-spread topology could shift in unpredictable ways. The test asserts only `result: multi_tie` and `title: Dune` from PTN, which is fairly resilient — but the assertion that the year guard (rather than any other path) caused the multi_tie outcome is only implicit. The integration test cannot distinguish 'multi_tie because year guard fired' from 'multi_tie because vote ratio was < 10x' from 'multi_tie because top.multi_tie was already True and override didn't even run'.",
+      "recommendation": "Optional: add an inline comment in T4 documenting that the synthetic T14 carries the load-bearing year-guard assertion, and T4 is the integration smoke. No code change required — T14 already pins the year-guard semantics in isolation, so T4 going flaky in a future DB refresh would be a maintenance nuisance, not a correctness gap."
+    }
+  ],
+  "residual_risks": [
+    "TIE_BREAK_VOTE_RATIO=10 is a magic constant calibrated against two real-world cases (Roger Rabbit 1110x, Mario Galaxy infinity). T13 pins the lower bound (5x must NOT fire) and T15 pins the zero-runner case. The actual threshold-boundary cases (e.g., exactly 10x, 9x, 11x) are not tested. If calibration drifts (someone changes the constant to 5 or 20), only T13's 5x->preserves assertion would break — no test would catch a change from 10 to 8 or 10 to 15. Acceptable for a tunable threshold, but worth noting.",
+    "Real-DB tests (T5 Roger Rabbit, T11 Mario Galaxy) couple the test suite to current IMDb dataset state. If IMDb removes the Roger Rabbit 1988 video game entry, the multi_tie heuristic in imdb_lookup wouldn't fire in the first place, and the override branch wouldn't be exercised at the integration layer — T5 would still pass (resolved + tt0096438) but for a different reason. The synthetic T13-T16 are the durable safety net here."
+  ],
+  "testing_gaps": [
+    "Branch coverage on _apply_vote_tie_breaker: 4 of 5 explicit branches asserted; the `not top.multi_tie` short-circuit is covered only indirectly via integration paths (resolved single-matches in T1-T3).",
+    "Edge case: both start_year=None is uncovered and the docstring implicitly suggests this should be a year-disambiguation case (it currently is not — None == None → guard passes → override may fire).",
+    "Helper-level idempotency / input-list non-mutation is structurally true but not asserted; covered only at export layer (test_contact_sheet_imdb T7).",
+    "Threshold boundary values (exactly 10x, 9x, 11x) not tested. Current tests anchor 5x and infinity; the 10x/11x boundary is unverified."
+  ]
+}
