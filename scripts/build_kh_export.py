@@ -48,6 +48,7 @@ Exit codes:
   1  config / arg error (missing --kb dir)
   2  build proceeded but no per-movie or manifest source was found
   3  build failure (parse / IO / unexpected exception)
+  4  build succeeded but one or more slugs degraded to fallback metadata
 """
 from __future__ import annotations
 
@@ -135,7 +136,8 @@ def collect_manifest_groups(jsonl_path: Path) -> dict[str, dict]:
 
 
 def build_manifest_json(groups: dict[str, dict],
-                        per_movie_paths: dict[str, Path] | None = None) -> dict:
+                        per_movie_paths: dict[str, Path] | None = None,
+                        degraded_slugs: set[str] | None = None) -> dict:
     """Assemble the slug-grouped manifest.json document.
 
     Per-movie JSON title/year overlays the manifest-derived values when
@@ -166,6 +168,8 @@ def build_manifest_json(groups: dict[str, dict],
                     if j_year is not None:
                         year = j_year
                 else:
+                    if degraded_slugs is not None:
+                        degraded_slugs.add(slug)
                     log("warn", f"per-movie JSON unreadable for {slug}; "
                                 f"manifest.json header falls back to manifest-derived title/year")
             except (json.JSONDecodeError, OSError, UnicodeDecodeError):
@@ -175,6 +179,8 @@ def build_manifest_json(groups: dict[str, dict],
                 # ValueError subclass, distinct from JSONDecodeError. Surface
                 # as warn so corruption is observable instead of silently
                 # degrading the header.
+                if degraded_slugs is not None:
+                    degraded_slugs.add(slug)
                 log("warn", f"per-movie JSON unreadable for {slug}; "
                             f"manifest.json header falls back to manifest-derived title/year")
         slugs_dict[slug] = {
@@ -196,7 +202,8 @@ def build_manifest_json(groups: dict[str, dict],
     }
 
 
-def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
+def build_slug_md(slug: str, group: dict, per_movie_json: Path | None,
+                  degraded_slugs: set[str] | None = None) -> str:
     """Build a markdown wrapper for a manifest slug. When the per-movie JSON
     exists, overlay its rich fields (fps/runtime/scdet/...). Always emit a
     'Caveats' section; degraded metadata gets explicit notes."""
@@ -213,6 +220,8 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
 
     has_json = per_movie_json is not None and per_movie_json.is_file()
     json_data: dict[str, Any] = {}
+    if not has_json and degraded_slugs is not None:
+        degraded_slugs.add(slug)
     if has_json:
         try:
             loaded_json = json.loads(per_movie_json.read_text(encoding="utf-8"))
@@ -221,6 +230,8 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
             else:
                 has_json = False
                 json_data = {}
+                if degraded_slugs is not None:
+                    degraded_slugs.add(slug)
                 log("warn", f"per-movie JSON unreadable for {slug}; "
                             f"falling back to bare-wrapper rendering")
             # Overlay title/year if the per-movie JSON has stronger values.
@@ -240,6 +251,8 @@ def build_slug_md(slug: str, group: dict, per_movie_json: Path | None) -> str:
             # path (no IMDb block, no fps/runtime/scdet).
             has_json = False
             json_data = {}
+            if degraded_slugs is not None:
+                degraded_slugs.add(slug)
             log("warn", f"per-movie JSON unreadable for {slug}; "
                         f"falling back to bare-wrapper rendering")
 
@@ -520,10 +533,12 @@ def build(kb: Path, out: Path) -> int:
 
     # Step 2: copy per-movie JSONs verbatim, track slug -> path.
     per_movie_paths: dict[str, Path] = {}
+    degraded_slugs: set[str] = set()
     if per_movie_in.exists():
         for json_file in sorted(per_movie_in.glob("*.json")):
             slug = json_file.stem
             if not json_file.is_file():
+                degraded_slugs.add(slug)
                 log("warn", f"per-movie JSON path is not a regular file for {slug}; "
                             f"skipping copy")
                 continue
@@ -538,6 +553,7 @@ def build(kb: Path, out: Path) -> int:
                         log("error", f"partial per-movie JSON cleanup failed for {slug}: "
                                      f"{copied_json}")
                         raise
+                degraded_slugs.add(slug)
                 log("warn", f"per-movie JSON unreadable for {slug}; "
                             f"skipping copy ({exc.__class__.__name__})")
                 continue
@@ -550,7 +566,7 @@ def build(kb: Path, out: Path) -> int:
     md_count = 0
     for slug in sorted(manifest_groups):
         json_path = per_movie_paths.get(slug)
-        md_text = build_slug_md(slug, manifest_groups[slug], json_path)
+        md_text = build_slug_md(slug, manifest_groups[slug], json_path, degraded_slugs)
         (per_movie_out / f"{slug}.md").write_text(md_text, encoding="utf-8")
         md_count += 1
     if md_count:
@@ -558,7 +574,7 @@ def build(kb: Path, out: Path) -> int:
 
     # Step 4: write slug-grouped manifest.json.
     if manifest_groups:
-        manifest_doc = build_manifest_json(manifest_groups, per_movie_paths)
+        manifest_doc = build_manifest_json(manifest_groups, per_movie_paths, degraded_slugs)
         (derived / "manifest.json").write_text(
             json.dumps(manifest_doc, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
@@ -575,10 +591,14 @@ def build(kb: Path, out: Path) -> int:
     tmp.rename(out)
 
     log("ok", f"built export at {out}")
+    log("info", f"export complete: slugs={len(manifest_groups)} "
+                f"degraded={len(degraded_slugs)}")
 
     if not per_movie_paths and not manifest_groups:
         log("warn", "exported only README.md (no per-movie or manifest source found)")
         return 2
+    if degraded_slugs:
+        return 4
     return 0
 
 

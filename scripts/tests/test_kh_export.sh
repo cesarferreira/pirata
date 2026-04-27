@@ -66,6 +66,11 @@ echo "=== run 1: build against live kb/ ==="
 python3 "$SCRIPT" > "$REPO/.kh_export_run1.log" 2>&1
 rc=$?
 if [ "$rc" -eq 0 ]; then pass "01.run 1 exits 0"; else fail "01.run 1 exit was $rc (see .kh_export_run1.log)"; fi
+if grep -Eq 'export complete: slugs=[0-9]+ degraded=0' "$REPO/.kh_export_run1.log"; then
+  pass "01a.run 1 clean summary reports degraded=0"
+else
+  fail "01a.run 1 missing clean degraded summary"
+fi
 
 # Layout assertions
 [ -d "$EXPORT/04-derived" ] && pass "02.04-derived/ exists" || fail "02.04-derived/ missing"
@@ -565,7 +570,7 @@ echo '{ not json' > "$KB6/per-movie/test-corrupt.json"
 OUT6="$KB6/out"
 RUN6_LOG=$(python3 "$SCRIPT" --kb "$KB6" --out "$OUT6" 2>&1)
 rc=$?
-if [ "$rc" -eq 0 ]; then pass "29.corrupt JSON: builder exits 0 (graceful)"; else fail "29.corrupt JSON: builder exit was $rc (log: $RUN6_LOG)"; fi
+if [ "$rc" -eq 4 ]; then pass "29.corrupt JSON: builder exits 4 (degraded success)"; else fail "29.corrupt JSON: builder exit was $rc (log: $RUN6_LOG)"; fi
 # Warn breadcrumb fires from BOTH overlay sites — split into two distinct
 # assertions so a future regression dropping one of the two log paths
 # (manifest.json header fallback vs bare-wrapper fallback) is caught
@@ -607,6 +612,11 @@ if grep -qF "## IMDb metadata" "$OUT6/04-derived/per-movie/test-corrupt.md" 2>/d
 else
   pass "33.corrupt JSON: wrapper rendered in bare-manifest mode"
 fi
+if printf '%s' "$RUN6_LOG" | grep -qF 'export complete: slugs=1 degraded=1'; then
+  pass "33a.corrupt JSON: degraded summary counts one slug"
+else
+  fail "33a.corrupt JSON: degraded summary missing or wrong"
+fi
 
 # 34 — Non-UTF-8 byte corruption: Path.read_text(encoding="utf-8") raises
 # UnicodeDecodeError (ValueError subclass), distinct from JSONDecodeError
@@ -622,11 +632,16 @@ printf '\xff\xfe garbage bytes \xff\xfe' > "$KB7/per-movie/test-utf8.json"
 OUT7="$KB7/out"
 RUN7_LOG=$(python3 "$SCRIPT" --kb "$KB7" --out "$OUT7" 2>&1)
 rc=$?
-if [ "$rc" -eq 0 ]; then pass "34.non-UTF-8 bytes: builder exits 0 (graceful)"; else fail "34.non-UTF-8 bytes: builder exit was $rc (log: $RUN7_LOG)"; fi
+if [ "$rc" -eq 4 ]; then pass "34.non-UTF-8 bytes: builder exits 4 (degraded success)"; else fail "34.non-UTF-8 bytes: builder exit was $rc (log: $RUN7_LOG)"; fi
 if printf '%s' "$RUN7_LOG" | grep -qF 'per-movie JSON unreadable for test-utf8'; then
   pass "35.non-UTF-8 bytes: warn breadcrumb emitted (UnicodeDecodeError path)"
 else
   fail "35.non-UTF-8 bytes: no warn breadcrumb (encoding error escaped except)"
+fi
+if printf '%s' "$RUN7_LOG" | grep -qF 'export complete: slugs=1 degraded=1'; then
+  pass "35a.non-UTF-8 bytes: degraded summary counts one slug"
+else
+  fail "35a.non-UTF-8 bytes: degraded summary missing or wrong"
 fi
 
 # 36-42 — Valid JSON can still be the wrong root shape. A numeric or list
@@ -645,7 +660,7 @@ echo '[]' > "$KB8/per-movie/test-nondict-list.json"
 OUT8="$KB8/out"
 RUN8_LOG=$(python3 "$SCRIPT" --kb "$KB8" --out "$OUT8" 2>&1)
 rc=$?
-if [ "$rc" -eq 0 ]; then pass "36.non-object JSON: builder exits 0 (graceful)"; else fail "36.non-object JSON: builder exit was $rc (log: $RUN8_LOG)"; fi
+if [ "$rc" -eq 4 ]; then pass "36.non-object JSON: builder exits 4 (degraded success)"; else fail "36.non-object JSON: builder exit was $rc (log: $RUN8_LOG)"; fi
 if printf '%s' "$RUN8_LOG" | grep -qF 'per-movie JSON unreadable for test-nondict-num; manifest.json header falls back to manifest-derived title/year'; then
   pass "37a.non-object JSON: build_manifest_json warn breadcrumb emitted"
 else
@@ -692,6 +707,11 @@ expect_not_in "42b.non-object JSON: list root no JSON-only fps"         "fps:" "
 expect_not_in "42c.non-object JSON: list root no JSON-only runtime"     "runtime_s:" "$LIST_MD"
 expect_in     "42d.non-object JSON: list root caveat emitted"           'No per-movie JSON exists at `kb/per-movie/test-nondict-list.json`.' "$LIST_MD"
 expect_not_in "42e.non-object JSON: list root no IMDb section"          "## IMDb metadata" "$LIST_MD"
+if printf '%s' "$RUN8_LOG" | grep -qF 'export complete: slugs=2 degraded=2'; then
+  pass "42f.non-object JSON: degraded summary counts two slugs"
+else
+  fail "42f.non-object JSON: degraded summary missing or wrong"
+fi
 
 # 43-49 — The builder copies kb/per-movie/*.json before wrapper/manifest
 # fallback code runs. Non-regular paths must be skipped before copy2 so a
@@ -708,7 +728,7 @@ ln -s "$KB9/per-movie/missing-target.json" "$KB9/per-movie/test-broken.json"
 OUT9="$KB9/out"
 RUN9_LOG=$(python3 "$SCRIPT" --kb "$KB9" --out "$OUT9" 2>&1)
 rc=$?
-if [ "$rc" -eq 0 ]; then pass "43.non-regular JSON paths: builder exits 0 (graceful)"; else fail "43.non-regular JSON paths: builder exit was $rc (log: $RUN9_LOG)"; fi
+if [ "$rc" -eq 4 ]; then pass "43.non-regular JSON paths: builder exits 4 (degraded success)"; else fail "43.non-regular JSON paths: builder exit was $rc (log: $RUN9_LOG)"; fi
 if printf '%s' "$RUN9_LOG" | grep -qF 'per-movie JSON path is not a regular file for test-dir'; then
   pass "44.non-regular JSON paths: directory warn breadcrumb emitted"
 else
@@ -747,6 +767,11 @@ if printf '%s' "$RUN9_LOG" | grep -qF 'copied 0 per-movie JSON file(s)'; then
 else
   fail "49.non-regular JSON paths: copied count did not exclude invalid sources"
 fi
+if printf '%s' "$RUN9_LOG" | grep -qF 'export complete: slugs=2 degraded=2'; then
+  pass "49a.non-regular JSON paths: degraded summary counts two slugs"
+else
+  fail "49a.non-regular JSON paths: degraded summary missing or wrong"
+fi
 
 # 50-52 — If copy2 fails after creating the destination path, the builder
 # must not publish the partial JSON artifact. Monkeypatch copy2 to simulate
@@ -776,8 +801,8 @@ print(f"rc={rc}")
 PYEOF
 )
 rc=$?
-if [ "$rc" -eq 0 ] && printf '%s' "$RUN10_LOG" | grep -qF 'rc=0'; then
-  pass "50.partial copy failure: builder exits 0 after cleanup"
+if [ "$rc" -eq 0 ] && printf '%s' "$RUN10_LOG" | grep -qF 'rc=4'; then
+  pass "50.partial copy failure: builder returns 4 after cleanup"
 else
   fail "50.partial copy failure: builder failed (rc=$rc log: $RUN10_LOG)"
 fi
@@ -809,6 +834,11 @@ assert s['year'] is None, f'year: {s[\"year\"]!r}'
   pass "54c.partial copy failure: manifest header falls back"
 else
   fail "54c.partial copy failure: manifest header did not fall back"
+fi
+if printf '%s' "$RUN10_LOG" | grep -qF 'export complete: slugs=1 degraded=1'; then
+  pass "54d.partial copy failure: degraded summary counts one slug"
+else
+  fail "54d.partial copy failure: degraded summary missing or wrong"
 fi
 
 # ----------------------------------------------------------------- summary ---
