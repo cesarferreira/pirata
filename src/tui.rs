@@ -17,12 +17,12 @@ use ratatui::backend::CrosstermBackend;
 use ratatui::layout::{Constraint, Direction, Layout};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap};
+use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 
 use crate::config::{Aria2Config, TransmissionConfig};
 use crate::history::{DownloadHistory, DownloadHistoryEntry};
 use crate::model::{Torrent, TrackedDownload};
-use crate::state::{DetachedDownloadRecord, load_recent_detached_downloads};
+use crate::state::{DetachedDownloadRecord, load_recent_detached_downloads, record_detached_download};
 use crate::util::{ensure_aria2_available, ensure_transmission_cli_available, format_size};
 
 const MAX_LOG_LINES: usize = 14;
@@ -321,14 +321,10 @@ where
         .style(Style::default().fg(Color::White));
         frame.render_widget(header, layout[0]);
 
-        let top = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(56), Constraint::Percentage(44)])
-            .split(layout[1]);
         let left = Layout::default()
             .direction(Direction::Vertical)
             .constraints([Constraint::Length(3), Constraint::Min(8)])
-            .split(top[0]);
+            .split(layout[1]);
 
         let query_block = Block::default()
             .borders(Borders::ALL)
@@ -357,7 +353,12 @@ where
                             .fg(Color::Yellow)
                             .add_modifier(Modifier::BOLD),
                     ),
-                    Span::styled("seed ", Style::default().fg(Color::DarkGray)),
+                    Span::styled("se ", Style::default().fg(Color::DarkGray)),
+                    Span::styled(
+                        format!("{:>4} ", torrent.leechers),
+                        Style::default().fg(Color::Red),
+                    ),
+                    Span::styled("le ", Style::default().fg(Color::DarkGray)),
                     Span::styled(
                         format!("{:>8} ", format_size(torrent.size_bytes)),
                         Style::default().fg(Color::Cyan),
@@ -382,22 +383,6 @@ where
         results_state.select((!self.results.is_empty()).then_some(self.selected_result));
         frame.render_stateful_widget(results, left[1], &mut results_state);
 
-        let details = self.result_details_lines();
-        let detail_widget = Paragraph::new(details)
-            .block(
-                Block::default()
-                    .borders(Borders::ALL)
-                    .title("Selection")
-                    .border_style(self.focus_style(FocusPane::Results)),
-            )
-            .wrap(Wrap { trim: true });
-        frame.render_widget(detail_widget, top[1]);
-
-        let bottom = Layout::default()
-            .direction(Direction::Horizontal)
-            .constraints([Constraint::Percentage(38), Constraint::Percentage(62)])
-            .split(layout[2]);
-
         let download_items: Vec<ListItem<'_>> = if self.downloads.is_empty() {
             vec![ListItem::new(Line::from(vec![Span::styled(
                 "No downloads yet. Press Enter on a result to start one.",
@@ -410,6 +395,39 @@ where
                     let line = Line::from(vec![
                         download.status_badge(),
                         Span::raw(" "),
+                        Span::styled(
+                            download.progress_summary(),
+                            Style::default()
+                                .fg(Color::LightBlue)
+                                .add_modifier(Modifier::BOLD),
+                        ),
+                        Span::raw(" "),
+                        Span::styled(
+                            progress_bar(download.progress_ratio(), 10),
+                            Style::default().fg(
+                                if matches!(download.outcome, Some(DownloadOutcome::Success)) {
+                                    Color::Green
+                                } else {
+                                    Color::Cyan
+                                },
+                            ),
+                        ),
+                        Span::raw("  "),
+                        Span::styled(
+                            format_elapsed_duration(download.started_at.elapsed()),
+                            Style::default().fg(Color::DarkGray),
+                        ),
+                        Span::raw("  "),
+                        Span::styled(
+                            format_size(download.torrent.size_bytes),
+                            Style::default().fg(Color::Cyan),
+                        ),
+                        Span::raw("  "),
+                        Span::styled(
+                            format!("{}se", download.torrent.seeders),
+                            Style::default().fg(Color::Yellow),
+                        ),
+                        Span::raw("  "),
                         Span::raw(download.torrent.name.clone()),
                     ]);
                     ListItem::new(line)
@@ -432,12 +450,7 @@ where
             .highlight_symbol("▌ ");
         let mut downloads_state = ListState::default();
         downloads_state.select((!self.downloads.is_empty()).then_some(self.selected_download));
-        frame.render_stateful_widget(downloads, bottom[0], &mut downloads_state);
-
-        let download_detail_widget = Paragraph::new(self.download_details_lines())
-            .block(Block::default().borders(Borders::ALL).title("Activity"))
-            .wrap(Wrap { trim: true });
-        frame.render_widget(download_detail_widget, bottom[1]);
+        frame.render_stateful_widget(downloads, layout[2], &mut downloads_state);
 
         let footer = Paragraph::new(vec![
             Line::from(vec![
@@ -475,7 +488,7 @@ where
                         .fg(Color::Yellow)
                         .add_modifier(Modifier::BOLD),
                 ),
-                Span::raw(" stop active + quit  "),
+                Span::raw(" detach + quit  "),
                 Span::styled(
                     "Q",
                     Style::default()
@@ -519,9 +532,7 @@ where
                 return Ok(());
             }
             KeyCode::Char('q') | KeyCode::Esc => {
-                if self.active_downloads() > 0 {
-                    self.abort_all_downloads()?;
-                }
+                self.detach_all_downloads()?;
                 self.should_quit = true;
                 return Ok(());
             }
@@ -672,6 +683,15 @@ where
         Ok(())
     }
 
+    fn detach_all_downloads(&mut self) -> Result<()> {
+        for download in &mut self.downloads {
+            if download.is_managed_active() {
+                download.detach()?;
+            }
+        }
+        Ok(())
+    }
+
     fn focus_style(&self, pane: FocusPane) -> Style {
         if self.focus == pane {
             Style::default()
@@ -682,145 +702,6 @@ where
         }
     }
 
-    fn result_details_lines(&self) -> Vec<Line<'static>> {
-        if let Some(selected) = self.results.get(self.selected_result) {
-            vec![
-                Line::from(vec![
-                    Span::styled("Name ", Style::default().fg(Color::DarkGray)),
-                    Span::raw(selected.name.clone()),
-                ]),
-                Line::from(vec![
-                    Span::styled("ID ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(selected.id.clone(), Style::default().fg(Color::Yellow)),
-                ]),
-                Line::from(vec![
-                    Span::styled("Seeders ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(
-                        selected.seeders.to_string(),
-                        Style::default()
-                            .fg(Color::Green)
-                            .add_modifier(Modifier::BOLD),
-                    ),
-                    Span::raw("   "),
-                    Span::styled("Leechers ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(
-                        selected.leechers.to_string(),
-                        Style::default().fg(Color::Red),
-                    ),
-                ]),
-                Line::from(vec![
-                    Span::styled("Size ", Style::default().fg(Color::DarkGray)),
-                    Span::styled(
-                        format_size(selected.size_bytes),
-                        Style::default().fg(Color::Cyan),
-                    ),
-                ]),
-                Line::from(vec![
-                    Span::styled("Status ", Style::default().fg(Color::DarkGray)),
-                    status_span(selected.status.as_deref()),
-                ]),
-                Line::from(vec![
-                    Span::styled("Uploader ", Style::default().fg(Color::DarkGray)),
-                    Span::raw(
-                        selected
-                            .uploaded_by
-                            .clone()
-                            .unwrap_or_else(|| "-".to_string()),
-                    ),
-                ]),
-                Line::from(""),
-                Line::from(format!(
-                    "Enter starts a tracked download with {}.",
-                    self.backend.name()
-                )),
-                Line::from(
-                    "Detached downloads started elsewhere also appear below, without live progress.",
-                ),
-            ]
-        } else if let Some(query) = &self.query {
-            vec![
-                Line::from(format!("No results loaded for '{query}'.")),
-                Line::from("Edit the query and press Enter to try again."),
-            ]
-        } else {
-            vec![
-                Line::from("Start by typing a search query."),
-                Line::from("The results list and downloads panel stay visible together."),
-            ]
-        }
-    }
-
-    fn download_details_lines(&self) -> Vec<Line<'static>> {
-        let Some(download) = self.downloads.get(self.selected_download) else {
-            return vec![
-                Line::from("No downloads yet."),
-                Line::from("Select a result and press Enter to start one."),
-            ];
-        };
-
-        let mut lines = vec![
-            Line::from(vec![
-                Span::styled("Torrent ", Style::default().fg(Color::DarkGray)),
-                Span::raw(download.torrent.name.clone()),
-            ]),
-            Line::from(vec![
-                Span::styled("Target ", Style::default().fg(Color::DarkGray)),
-                Span::raw(if download.target_path.as_os_str().is_empty() {
-                    "unknown".to_string()
-                } else {
-                    download.target_path.display().to_string()
-                }),
-            ]),
-            Line::from(vec![
-                Span::styled("Progress ", Style::default().fg(Color::DarkGray)),
-                Span::styled(
-                    download.progress_summary(),
-                    Style::default()
-                        .fg(Color::LightBlue)
-                        .add_modifier(Modifier::BOLD),
-                ),
-                Span::raw("  "),
-                Span::styled(
-                    progress_bar(download.progress_ratio(), 24),
-                    Style::default().fg(
-                        if matches!(download.outcome, Some(DownloadOutcome::Success)) {
-                            Color::Green
-                        } else {
-                            Color::Cyan
-                        },
-                    ),
-                ),
-                Span::raw("  "),
-                Span::raw(download.progress_label()),
-            ]),
-            Line::from(vec![
-                Span::styled("Size ", Style::default().fg(Color::DarkGray)),
-                Span::raw(format_size(download.torrent.size_bytes)),
-                Span::raw("  "),
-                Span::styled("Seeders ", Style::default().fg(Color::DarkGray)),
-                Span::raw(download.torrent.seeders.to_string()),
-                Span::raw("  "),
-                Span::styled("Elapsed ", Style::default().fg(Color::DarkGray)),
-                Span::raw(format_elapsed_duration(download.started_at.elapsed())),
-            ]),
-            Line::from(""),
-            Line::from(Span::styled(
-                "Latest output",
-                Style::default()
-                    .add_modifier(Modifier::BOLD)
-                    .fg(Color::Yellow),
-            )),
-        ];
-
-        let logs = download.logs_for_render();
-        if logs.is_empty() {
-            lines.push(Line::from("No output yet."));
-        } else {
-            lines.extend(logs.into_iter().rev().take(5).rev());
-        }
-
-        lines
-    }
 }
 
 struct DownloadSession {
@@ -1059,6 +940,22 @@ impl DownloadSession {
         Ok(())
     }
 
+    fn detach(&mut self) -> Result<()> {
+        let Some(child) = self.child.take() else {
+            return Ok(());
+        };
+        let pid = child.id();
+        // Drop without killing — the downloader keeps running in the background.
+        drop(child);
+        let download_dir = self
+            .target_path
+            .parent()
+            .and_then(|p| p.to_str())
+            .map(String::from);
+        record_detached_download(&self.torrent, pid, download_dir)?;
+        Ok(())
+    }
+
     fn is_finished(&self) -> bool {
         self.outcome.is_some()
     }
@@ -1113,10 +1010,6 @@ impl DownloadSession {
         }
     }
 
-    fn progress_label(&self) -> String {
-        self.status_text.clone()
-    }
-
     fn progress_summary(&self) -> String {
         if let Some(progress) = self.progress {
             format!("{:>5.1}%", progress * 100.0)
@@ -1155,13 +1048,6 @@ impl DownloadSession {
                 Style::default().fg(Color::Black).bg(Color::Cyan),
             ),
         }
-    }
-
-    fn logs_for_render(&self) -> Vec<Line<'static>> {
-        self.logs
-            .iter()
-            .map(|line| Line::from(line.clone()))
-            .collect()
     }
 
     fn push_log(&mut self, line: String) {
@@ -1695,14 +1581,6 @@ mod tests {
 
         assert_eq!(download.progress_ratio(), 0.0);
         assert_eq!(download.progress_ratio(), 0.0);
-    }
-
-    #[test]
-    fn unknown_progress_label_uses_status_without_spinner() {
-        let download = test_download_session(SessionBackend::Aria2);
-
-        assert_eq!(download.progress_label(), "Fetching metadata...");
-        assert_eq!(download.progress_label(), "Fetching metadata...");
     }
 
     #[test]
