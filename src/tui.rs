@@ -392,15 +392,8 @@ where
             self.downloads
                 .iter()
                 .map(|download| {
-                    let line = Line::from(vec![
+                    let mut spans: Vec<Span<'_>> = vec![
                         download.status_badge(),
-                        Span::raw(" "),
-                        Span::styled(
-                            download.progress_summary(),
-                            Style::default()
-                                .fg(Color::LightBlue)
-                                .add_modifier(Modifier::BOLD),
-                        ),
                         Span::raw(" "),
                         Span::styled(
                             progress_bar(download.progress_ratio(), 10),
@@ -418,19 +411,26 @@ where
                             Style::default().fg(Color::DarkGray),
                         ),
                         Span::raw("  "),
-                        Span::styled(
+                    ];
+                    if download.is_managed_active() {
+                        spans.push(Span::styled(
+                            truncate_end(&download.status_text, 42),
+                            Style::default().fg(Color::White),
+                        ));
+                    } else {
+                        spans.push(Span::styled(
                             format_size(download.torrent.size_bytes),
                             Style::default().fg(Color::Cyan),
-                        ),
-                        Span::raw("  "),
-                        Span::styled(
+                        ));
+                        spans.push(Span::raw("  "));
+                        spans.push(Span::styled(
                             format!("{}se", download.torrent.seeders),
                             Style::default().fg(Color::Yellow),
-                        ),
-                        Span::raw("  "),
-                        Span::raw(download.torrent.name.clone()),
-                    ]);
-                    ListItem::new(line)
+                        ));
+                    }
+                    spans.push(Span::raw("  "));
+                    spans.push(Span::raw(download.torrent.name.clone()));
+                    ListItem::new(Line::from(spans))
                 })
                 .collect()
         };
@@ -1020,7 +1020,7 @@ impl DownloadSession {
         } else if matches!(self.outcome, Some(DownloadOutcome::Success)) {
             "100.0%".to_string()
         } else {
-            "  0.0%".to_string()
+            " meta ".to_string()
         }
     }
 
@@ -1462,6 +1462,15 @@ fn truncate_middle(value: &str, max_chars: usize) -> String {
     format!("{head}...{tail}")
 }
 
+fn truncate_end(value: &str, max_chars: usize) -> String {
+    let chars: Vec<char> = value.chars().collect();
+    if chars.len() <= max_chars {
+        return value.to_string();
+    }
+    let truncated: String = chars.iter().take(max_chars.saturating_sub(1)).collect();
+    format!("{truncated}…")
+}
+
 fn focus_badge(label: &'static str, active: bool) -> Span<'static> {
     if active {
         Span::styled(
@@ -1566,8 +1575,9 @@ mod tests {
     fn active_download_badge_uses_stable_percentage() {
         let mut download = test_download_session(SessionBackend::Aria2);
 
-        assert_eq!(download.status_badge().content.as_ref(), "  0.0%");
-        assert_eq!(download.status_badge().content.as_ref(), "  0.0%");
+        assert_eq!(download.status_badge().content.as_ref(), " meta ");
+        assert_eq!(download.status_badge().content.as_ref(), " meta ");
+
 
         download.progress = Some(0.425);
 
