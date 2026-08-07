@@ -414,9 +414,16 @@ where
                         Span::raw("  "),
                     ];
                     if download.is_managed_active() {
+                        spans.push(download.eta_span());
+                        spans.push(Span::raw("  "));
                         spans.push(Span::styled(
-                            truncate_end(&download.status_text, 55),
+                            truncate_end(&download.status_text, 36),
                             Style::default().fg(Color::White),
+                        ));
+                        spans.push(Span::raw("  "));
+                        spans.push(Span::styled(
+                            truncate_end(&download.torrent.name, 32),
+                            Style::default().fg(Color::DarkGray),
                         ));
                     } else {
                         spans.push(Span::styled(
@@ -429,8 +436,10 @@ where
                             Style::default().fg(Color::Yellow),
                         ));
                     }
-                    spans.push(Span::raw("  "));
-                    spans.push(Span::raw(download.torrent.name.clone()));
+                    if !download.is_managed_active() {
+                        spans.push(Span::raw("  "));
+                        spans.push(Span::raw(download.torrent.name.clone()));
+                    }
                     ListItem::new(Line::from(spans))
                 })
                 .collect()
@@ -720,6 +729,7 @@ struct DownloadSession {
     outcome: Option<DownloadOutcome>,
     history_synced: bool,
     last_byte_sample: Option<(Instant, u64)>,
+    eta_display: Option<String>,
 }
 
 impl DownloadSession {
@@ -758,6 +768,7 @@ impl DownloadSession {
             outcome: None,
             history_synced: false,
             last_byte_sample: None,
+            eta_display: None,
         })
     }
 
@@ -806,6 +817,7 @@ impl DownloadSession {
             outcome: None,
             history_synced: true,
             last_byte_sample: None,
+            eta_display: None,
         }
     }
 
@@ -843,14 +855,12 @@ impl DownloadSession {
             outcome: Some(DownloadOutcome::Success),
             history_synced: true,
             last_byte_sample: None,
+            eta_display: None,
         }
     }
 
     fn refresh_disk_progress(&mut self) {
         if !self.is_managed_active() || !matches!(self.backend, SessionBackend::Aria2) {
-            return;
-        }
-        if self.progress.is_some() {
             return;
         }
         if self.torrent.size_bytes == 0 {
@@ -869,6 +879,10 @@ impl DownloadSession {
         }
 
         let ratio = (bytes as f64 / self.torrent.size_bytes as f64).clamp(0.0, 1.0);
+        if self.progress.is_some_and(|current| current >= ratio - 0.001) {
+            return;
+        }
+
         self.progress = Some(ratio);
 
         let mut parts = vec![format!("{:>5.1}%", ratio * 100.0)];
@@ -884,11 +898,46 @@ impl DownloadSession {
                         "eta {}",
                         format_elapsed_duration(Duration::from_secs(eta_secs))
                     ));
+                    self.eta_display = Some(format_elapsed_duration(Duration::from_secs(eta_secs)));
                 }
             }
         }
         self.last_byte_sample = Some((Instant::now(), bytes));
         self.status_text = parts.join(" | ");
+    }
+
+    fn apply_aria2_progress_line(&mut self, line: &str) {
+        let Some(progress) = parse_aria2_progress_line(line.trim()) else {
+            return;
+        };
+        let ratio = progress
+            .ratio
+            .or(self.progress)
+            .or_else(|| estimate_progress_from_line(line, self.torrent.size_bytes));
+        if let Some(ratio) = progress.ratio {
+            self.progress = Some(ratio);
+        }
+        self.eta_display = resolve_aria2_eta(&progress, ratio, self.torrent.size_bytes);
+    }
+
+    fn eta_span(&self) -> Span<'static> {
+        let eta = if let Some(eta) = self.eta_display.as_deref() {
+            eta
+        } else if self.status_text.starts_with("metadata")
+            || self.status_text.starts_with("meta ")
+            || self.progress.unwrap_or(0.0) <= f64::EPSILON
+                && self.status_text.contains("metadata")
+        {
+            "meta"
+        } else {
+            "—"
+        };
+        Span::styled(
+            format!("ETA {eta}"),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )
     }
 
     fn drain_events(&mut self) {
@@ -912,14 +961,23 @@ impl DownloadSession {
                             {
                                 if let Some(progress) = update.progress {
                                     self.progress = Some(progress);
+                                } else if let Some(progress) =
+                                    estimate_progress_from_line(&line, self.torrent.size_bytes)
+                                {
+                                    self.progress = Some(progress);
                                 }
                                 if let Some(context) = update.context {
                                     self.context_text = Some(context);
                                 }
                                 self.status_text = update.status;
+                            } else if let Some(progress) =
+                                estimate_progress_from_line(&line, self.torrent.size_bytes)
+                            {
+                                self.progress = Some(progress);
                             } else {
                                 continue;
                             }
+                            self.apply_aria2_progress_line(&line);
                         }
                         SessionBackend::External => {
                             self.status_text = line.clone();
@@ -1199,8 +1257,6 @@ fn spawn_aria2_cli_with_pty(
     config: &Aria2Config,
 ) -> Result<(Child, Receiver<DownloadEvent>)> {
     use std::fs::File;
-    use std::os::fd::AsRawFd;
-    use std::os::unix::process::CommandExt;
 
     use nix::pty::{Winsize, openpty};
 
@@ -1214,28 +1270,19 @@ fn spawn_aria2_cli_with_pty(
         openpty(Some(&winsize), None).context("failed to create pseudo-terminal for aria2c")?;
     let master = openpty_result.master;
     let slave = openpty_result.slave;
-    let slave_fd = slave.as_raw_fd();
+    let slave_stdout = slave
+        .try_clone()
+        .context("failed to duplicate aria2c pty stdout")?;
+    let slave_stderr = slave
+        .try_clone()
+        .context("failed to duplicate aria2c pty stderr")?;
 
     let mut command = build_aria2_tui_command(torrent, config);
-    command.stdin(Stdio::null());
-    command.stdout(Stdio::null());
-    command.stderr(Stdio::null());
-    unsafe {
-        command.pre_exec(move || {
-            for stdfd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
-                if libc::dup2(slave_fd, stdfd) == -1 {
-                    return Err(io::Error::last_os_error());
-                }
-            }
-            if slave_fd > 2 {
-                let _ = libc::close(slave_fd);
-            }
-            Ok(())
-        });
-    }
+    command.stdin(Stdio::from(slave));
+    command.stdout(Stdio::from(slave_stdout));
+    command.stderr(Stdio::from(slave_stderr));
 
     let child = command.spawn().context("failed to start aria2c")?;
-    drop(slave);
 
     let master_file = File::from(master);
     let (sender, receiver) = mpsc::channel();
@@ -1280,9 +1327,10 @@ fn build_aria2_tui_command(torrent: &Torrent, config: &Aria2Config) -> Command {
     command.arg("--download-result=hide");
     command.arg("--enable-color=false");
     command.arg("--console-log-level=error");
+    command.arg("--human-readable=false");
     command.arg("--bt-max-peers=30");
     command.arg("--file-allocation=none");
-    if let Some(download_dir) = &config.download_dir {
+    if let Some(download_dir) = config.download_dir_path() {
         command.arg("--dir").arg(download_dir);
     }
     command.arg(torrent.resolved_magnet());
@@ -1452,6 +1500,31 @@ fn parse_aria2_context(line: &str) -> Option<String> {
     )
 }
 
+fn estimate_progress_from_line(line: &str, total_bytes: u64) -> Option<f64> {
+    if total_bytes == 0 {
+        return None;
+    }
+    let trimmed = line.trim();
+    if !trimmed.starts_with("[#") {
+        return None;
+    }
+
+    let body = trimmed
+        .trim_start_matches("[#")
+        .strip_suffix(']')
+        .unwrap_or(trimmed)
+        .trim();
+    let mut fields = body.split_whitespace();
+    fields.next()?;
+    let transfer = fields.next()?;
+    let (complete, total) = transfer.split_once('/')?;
+    if let Some(ratio) = calculate_size_ratio(complete, total) {
+        return Some(ratio);
+    }
+    let complete_bytes = parse_aria2_size_to_bytes(complete)?;
+    Some((complete_bytes as f64 / total_bytes as f64).clamp(0.0, 1.0))
+}
+
 struct ParsedAria2Progress {
     ratio: Option<f64>,
     peers: Option<String>,
@@ -1500,6 +1573,35 @@ fn parse_aria2_progress_line(line: &str) -> Option<ParsedAria2Progress> {
     }
 
     Some(progress)
+}
+
+fn resolve_aria2_eta(
+    progress: &ParsedAria2Progress,
+    ratio: Option<f64>,
+    total_bytes: u64,
+) -> Option<String> {
+    if let Some(eta) = progress.eta.as_deref() {
+        let trimmed = eta.trim();
+        if !trimmed.is_empty() && !matches!(trimmed, "-" | "--" | "∞" | "INF" | "inf") {
+            return Some(trimmed.to_string());
+        }
+    }
+
+    let speed_str = progress.download_speed.as_deref()?;
+    let speed = parse_aria2_size_to_bytes(speed_str.trim_end_matches("/s"))?;
+    if speed == 0 || total_bytes == 0 {
+        return None;
+    }
+
+    let ratio = ratio.unwrap_or(0.0);
+    let remaining = (total_bytes as f64 * (1.0 - ratio).clamp(0.0, 1.0)).round() as u64;
+    if remaining == 0 {
+        return Some("0s".to_string());
+    }
+
+    Some(format_elapsed_duration(Duration::from_secs(
+        ((remaining as f64 / speed as f64).round() as u64).max(1),
+    )))
 }
 
 fn render_aria2_status(progress: &ParsedAria2Progress, current_context: Option<&str>) -> String {
@@ -1551,10 +1653,15 @@ fn parse_aria2_size_to_bytes(value: &str) -> Option<u64> {
     let amount: f64 = number.parse().ok()?;
     let multiplier = match unit.trim() {
         "" | "B" => 1.0,
-        "KiB" => 1024.0,
-        "MiB" => 1024.0 * 1024.0,
-        "GiB" => 1024.0 * 1024.0 * 1024.0,
-        "TiB" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        "K" | "k" => 1024.0,
+        "Ki" | "KiB" => 1024.0,
+        "M" | "Mi" | "MiB" => 1024.0 * 1024.0,
+        "G" | "Gi" | "GiB" => 1024.0 * 1024.0 * 1024.0,
+        "T" | "Ti" | "TiB" => 1024.0 * 1024.0 * 1024.0 * 1024.0,
+        "KB" => 1000.0,
+        "MB" => 1_000_000.0,
+        "GB" => 1_000_000_000.0,
+        "TB" => 1_000_000_000_000.0,
         _ => return None,
     };
 
@@ -1591,6 +1698,20 @@ fn measure_download_bytes(download_dir: &Path, torrent_name: &str) -> u64 {
                     total += directory_file_bytes(&entry.path());
                 }
             }
+        }
+    }
+
+    if total > 0 {
+        return total;
+    }
+
+    for entry in std::fs::read_dir(download_dir).into_iter().flatten().flatten() {
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        if path.with_extension("aria2").exists() {
+            total += entry.metadata().map(|meta| meta.len()).unwrap_or(0);
         }
     }
 
@@ -1704,7 +1825,7 @@ mod tests {
     use super::{
         DownloadSession, DownloadTracking, SessionBackend, TICK_RATE, build_aria2_tui_command,
         calculate_size_ratio, drain_output_chunk, format_elapsed_duration, parse_aria2_context,
-        parse_aria2_progress_line, parse_transmission_progress,
+        parse_aria2_progress_line, parse_transmission_progress, resolve_aria2_eta,
     };
 
     #[test]
@@ -1733,8 +1854,19 @@ mod tests {
     }
 
     #[test]
+    fn resolves_aria2_eta_from_speed_and_size() {
+        let progress =
+            parse_aria2_progress_line("[#abcd 2MiB/8MiB CN:4 DL:1MiB]").expect("progress line");
+        assert_eq!(
+            resolve_aria2_eta(&progress, progress.ratio, 8 * 1024 * 1024).as_deref(),
+            Some("6s")
+        );
+    }
+
+    #[test]
     fn calculates_aria2_size_ratio() {
         assert_eq!(calculate_size_ratio("512KiB", "1MiB"), Some(0.5));
+        assert_eq!(calculate_size_ratio("512Ki", "10Mi"), Some(0.05));
     }
 
     #[test]
@@ -1781,6 +1913,7 @@ mod tests {
             .collect();
 
         assert!(args.iter().any(|arg| arg == "--summary-interval=1"));
+        assert!(args.iter().any(|arg| arg == "--human-readable=false"));
         assert!(args.iter().any(|arg| arg == "--bt-max-peers=30"));
         assert!(args.iter().any(|arg| arg == "--file-allocation=none"));
     }
@@ -1817,6 +1950,7 @@ mod tests {
             outcome: None,
             history_synced: false,
             last_byte_sample: None,
+            eta_display: None,
         }
     }
 

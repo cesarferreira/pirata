@@ -13,7 +13,6 @@ dialoguer = { version = "0.12", features = ["fuzzy-select"] }
 directories = "6.0"
 indicatif = "0.17"
 nix = { version = "0.31.3", features = ["term"] }
-libc = "0.2"
 open = "5.3"
 ratatui = "0.29"
 reqwest = { version = "0.12", default-features = false, features = ["brotli", "deflate", "gzip", "json", "rustls-tls"] }
