@@ -384,6 +384,7 @@ where
         results_state.select((!self.results.is_empty()).then_some(self.selected_result));
         frame.render_stateful_widget(results, left[1], &mut results_state);
 
+        let download_width = layout[2].width.saturating_sub(2) as usize;
         let download_items: Vec<ListItem<'_>> = if self.downloads.is_empty() {
             vec![ListItem::new(Line::from(vec![Span::styled(
                 "No downloads yet. Press Enter on a result to start one.",
@@ -417,13 +418,8 @@ where
                         spans.push(download.eta_span());
                         spans.push(Span::raw("  "));
                         spans.push(Span::styled(
-                            truncate_end(&download.status_text, 36),
+                            download.active_row_primary_text(download_width),
                             Style::default().fg(Color::White),
-                        ));
-                        spans.push(Span::raw("  "));
-                        spans.push(Span::styled(
-                            truncate_end(&download.torrent.name, 32),
-                            Style::default().fg(Color::DarkGray),
                         ));
                     } else {
                         spans.push(Span::styled(
@@ -920,18 +916,83 @@ impl DownloadSession {
         self.eta_display = resolve_aria2_eta(&progress, ratio, self.torrent.size_bytes);
     }
 
-    fn eta_span(&self) -> Span<'static> {
-        let eta = if let Some(eta) = self.eta_display.as_deref() {
-            eta
-        } else if self.status_text.starts_with("metadata")
-            || self.status_text.starts_with("meta ")
-            || self.progress.unwrap_or(0.0) <= f64::EPSILON
-                && self.status_text.contains("metadata")
-        {
-            "meta"
+    fn eta_display_label(&self) -> String {
+        if let Some(eta) = &self.eta_display {
+            return eta.clone();
+        }
+        if self.is_metadata_phase() {
+            "meta".to_string()
         } else {
-            "—"
-        };
+            "—".to_string()
+        }
+    }
+
+    fn is_metadata_phase(&self) -> bool {
+        if self.eta_display.is_some() {
+            return false;
+        }
+        if self.progress.unwrap_or(0.0) >= 0.01 {
+            return false;
+        }
+        if self.context_text.is_some() {
+            return true;
+        }
+        let status = self.status_text.as_str();
+        status.starts_with("metadata |") || status.starts_with("Fetching metadata")
+    }
+
+    fn active_row_prefix_chars(&self) -> usize {
+        char_len(&self.progress_summary())
+            + 1
+            + 10
+            + 2
+            + char_len(&format_elapsed_duration(self.started_at.elapsed()))
+            + 2
+            + char_len(&format!("ETA {}", self.eta_display_label()))
+            + 2
+    }
+
+    fn active_row_primary_text(&self, row_width: usize) -> String {
+        let budget = row_width.saturating_sub(self.active_row_prefix_chars());
+        if budget <= 4 {
+            return truncate_end(&self.torrent.name, budget);
+        }
+
+        if self.is_metadata_phase() {
+            return truncate_end(&self.torrent.name, budget);
+        }
+
+        if let Some(snippet) = self.transfer_snippet() {
+            let suffix = format!("  | {snippet}");
+            let suffix_len = char_len(&suffix);
+            if budget > suffix_len + 8 {
+                let title_len = budget - suffix_len;
+                return format!(
+                    "{}{}",
+                    truncate_end(&self.torrent.name, title_len),
+                    suffix
+                );
+            }
+        }
+
+        truncate_end(&self.torrent.name, budget)
+    }
+
+    fn transfer_snippet(&self) -> Option<String> {
+        if self.is_metadata_phase() {
+            return None;
+        }
+
+        let compact = compact_transfer_status(&self.status_text);
+        if compact.is_empty() {
+            None
+        } else {
+            Some(compact)
+        }
+    }
+
+    fn eta_span(&self) -> Span<'static> {
+        let eta = self.eta_display_label();
         Span::styled(
             format!("ETA {eta}"),
             Style::default()
@@ -969,7 +1030,9 @@ impl DownloadSession {
                                 if let Some(context) = update.context {
                                     self.context_text = Some(context);
                                 }
-                                self.status_text = update.status;
+                                if !update.status.is_empty() {
+                                    self.status_text = update.status;
+                                }
                             } else if let Some(progress) =
                                 estimate_progress_from_line(&line, self.torrent.size_bytes)
                             {
@@ -1457,18 +1520,45 @@ struct Aria2Update {
     context: Option<String>,
 }
 
+enum Aria2ContextLine {
+    Metadata(String),
+    File(String),
+}
+
+fn parse_aria2_context_line(line: &str) -> Option<Aria2ContextLine> {
+    let value = line.strip_prefix("FILE: ")?.trim();
+    if let Some(name) = value.strip_prefix("[MEMORY][METADATA]") {
+        return Some(Aria2ContextLine::Metadata(name.trim().to_string()));
+    }
+    Some(Aria2ContextLine::File(value.to_string()))
+}
+
 fn parse_aria2_update(line: &str, current_context: Option<&str>) -> Option<Aria2Update> {
     let trimmed = line.trim();
     if trimmed.is_empty() || is_aria2_noise(trimmed) {
         return None;
     }
 
-    if let Some(context) = parse_aria2_context(trimmed) {
-        return Some(Aria2Update {
-            status: format!("metadata | {}", truncate_middle(&context, 26)),
-            progress: None,
-            context: Some(context),
-        });
+    if let Some(context) = parse_aria2_context_line(trimmed) {
+        return match context {
+            Aria2ContextLine::Metadata(name) => Some(Aria2Update {
+                status: truncate_middle(&name, 36),
+                progress: None,
+                context: Some(name),
+            }),
+            Aria2ContextLine::File(path) => {
+                let name = path
+                    .rsplit(['/', '\\'])
+                    .next()
+                    .unwrap_or(path.as_str())
+                    .to_string();
+                Some(Aria2Update {
+                    status: String::new(),
+                    progress: None,
+                    context: Some(name),
+                })
+            }
+        };
     }
 
     if let Some(progress) = parse_aria2_progress_line(trimmed) {
@@ -1489,15 +1579,24 @@ fn is_aria2_noise(line: &str) -> bool {
         || line.contains("Exception caught while loading DHT routing table")
 }
 
-fn parse_aria2_context(line: &str) -> Option<String> {
-    let value = line.strip_prefix("FILE: ")?.trim();
-    Some(
-        value
-            .strip_prefix("[MEMORY][METADATA]")
-            .unwrap_or(value)
-            .trim()
-            .to_string(),
-    )
+fn compact_transfer_status(status: &str) -> String {
+    status
+        .split(" | ")
+        .map(str::trim)
+        .filter(|part| {
+            !part.is_empty()
+                && !part.starts_with("metadata")
+                && !part.starts_with("meta ")
+                && !part.starts_with("eta ")
+                && !part.ends_with('%')
+                && *part != "metadata"
+        })
+        .collect::<Vec<_>>()
+        .join(" | ")
+}
+
+fn char_len(value: &str) -> usize {
+    value.chars().count()
 }
 
 fn estimate_progress_from_line(line: &str, total_bytes: u64) -> Option<f64> {
@@ -1606,12 +1705,10 @@ fn resolve_aria2_eta(
 
 fn render_aria2_status(progress: &ParsedAria2Progress, current_context: Option<&str>) -> String {
     let mut parts = Vec::new();
-    if let Some(ratio) = progress.ratio {
+    if let Some(ratio) = progress.ratio.filter(|ratio| *ratio >= 0.001) {
         parts.push(format!("{:>5.1}%", ratio * 100.0));
-    } else if let Some(context) = current_context {
-        parts.push(format!("meta {}", truncate_middle(context, 18)));
-    } else {
-        parts.push("metadata".to_string());
+    } else if let Some(context) = current_context.filter(|_| progress.ratio.is_none()) {
+        parts.push(truncate_middle(context, 22));
     }
     if let Some(peers) = &progress.peers {
         parts.push(format!("peers {peers}"));
@@ -1824,8 +1921,9 @@ mod tests {
 
     use super::{
         DownloadSession, DownloadTracking, SessionBackend, TICK_RATE, build_aria2_tui_command,
-        calculate_size_ratio, drain_output_chunk, format_elapsed_duration, parse_aria2_context,
-        parse_aria2_progress_line, parse_transmission_progress, resolve_aria2_eta,
+        calculate_size_ratio, compact_transfer_status, drain_output_chunk,
+        format_elapsed_duration, parse_aria2_context_line, parse_aria2_progress_line,
+        parse_transmission_progress, resolve_aria2_eta, Aria2ContextLine,
     };
 
     #[test]
@@ -1847,9 +1945,17 @@ mod tests {
 
     #[test]
     fn parses_aria2_context_metadata() {
+        match parse_aria2_context_line("FILE: [MEMORY][METADATA]Dune Part Two").unwrap() {
+            Aria2ContextLine::Metadata(name) => assert_eq!(name, "Dune Part Two"),
+            Aria2ContextLine::File(_) => panic!("expected metadata context"),
+        }
+    }
+
+    #[test]
+    fn compact_transfer_status_drops_metadata_noise() {
         assert_eq!(
-            parse_aria2_context("FILE: [MEMORY][METADATA]Dune Part Two"),
-            Some("Dune Part Two".to_string())
+            compact_transfer_status("peers 4 | down 1MiB/s | eta 8s"),
+            "peers 4 | down 1MiB/s"
         );
     }
 
