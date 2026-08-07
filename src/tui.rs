@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::io::{self, BufReader, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::thread;
@@ -204,6 +204,7 @@ where
             self.tick = self.tick.wrapping_add(1);
             for download in &mut self.downloads {
                 download.drain_events();
+                download.refresh_disk_progress();
                 download.poll_child()?;
             }
             self.persist_completed_downloads()?;
@@ -414,7 +415,7 @@ where
                     ];
                     if download.is_managed_active() {
                         spans.push(Span::styled(
-                            truncate_end(&download.status_text, 42),
+                            truncate_end(&download.status_text, 55),
                             Style::default().fg(Color::White),
                         ));
                     } else {
@@ -718,6 +719,7 @@ struct DownloadSession {
     started_at: Instant,
     outcome: Option<DownloadOutcome>,
     history_synced: bool,
+    last_byte_sample: Option<(Instant, u64)>,
 }
 
 impl DownloadSession {
@@ -755,6 +757,7 @@ impl DownloadSession {
             started_at: Instant::now(),
             outcome: None,
             history_synced: false,
+            last_byte_sample: None,
         })
     }
 
@@ -802,6 +805,7 @@ impl DownloadSession {
             started_at: Instant::now() - Duration::from_secs(elapsed),
             outcome: None,
             history_synced: true,
+            last_byte_sample: None,
         }
     }
 
@@ -838,7 +842,53 @@ impl DownloadSession {
             started_at: Instant::now(),
             outcome: Some(DownloadOutcome::Success),
             history_synced: true,
+            last_byte_sample: None,
         }
+    }
+
+    fn refresh_disk_progress(&mut self) {
+        if !self.is_managed_active() || !matches!(self.backend, SessionBackend::Aria2) {
+            return;
+        }
+        if self.progress.is_some() {
+            return;
+        }
+        if self.torrent.size_bytes == 0 {
+            return;
+        }
+        let Some(download_dir) = self.target_path.parent() else {
+            return;
+        };
+        if download_dir.as_os_str().is_empty() {
+            return;
+        }
+
+        let bytes = measure_download_bytes(download_dir, &self.torrent.name);
+        if bytes == 0 {
+            return;
+        }
+
+        let ratio = (bytes as f64 / self.torrent.size_bytes as f64).clamp(0.0, 1.0);
+        self.progress = Some(ratio);
+
+        let mut parts = vec![format!("{:>5.1}%", ratio * 100.0)];
+        if let Some((previous_at, previous_bytes)) = self.last_byte_sample {
+            let elapsed = previous_at.elapsed().as_secs_f64();
+            if elapsed >= 0.5 && bytes > previous_bytes {
+                let speed = (bytes - previous_bytes) as f64 / elapsed;
+                if speed > 0.0 {
+                    parts.push(format!("down {}/s", format_size(speed as u64)));
+                    let remaining = self.torrent.size_bytes.saturating_sub(bytes);
+                    let eta_secs = (remaining as f64 / speed).round() as u64;
+                    parts.push(format!(
+                        "eta {}",
+                        format_elapsed_duration(Duration::from_secs(eta_secs))
+                    ));
+                }
+            }
+        }
+        self.last_byte_sample = Some((Instant::now(), bytes));
+        self.status_text = parts.join(" | ");
     }
 
     fn drain_events(&mut self) {
@@ -1132,6 +1182,73 @@ fn spawn_aria2_cli(
 ) -> Result<(Child, Receiver<DownloadEvent>)> {
     ensure_aria2_available()?;
 
+    #[cfg(unix)]
+    {
+        return spawn_aria2_cli_with_pty(torrent, config);
+    }
+
+    #[cfg(not(unix))]
+    {
+        spawn_aria2_cli_piped(torrent, config)
+    }
+}
+
+#[cfg(unix)]
+fn spawn_aria2_cli_with_pty(
+    torrent: &Torrent,
+    config: &Aria2Config,
+) -> Result<(Child, Receiver<DownloadEvent>)> {
+    use std::fs::File;
+    use std::os::fd::AsRawFd;
+    use std::os::unix::process::CommandExt;
+
+    use nix::pty::{Winsize, openpty};
+
+    let winsize = Winsize {
+        ws_row: 40,
+        ws_col: 120,
+        ws_xpixel: 0,
+        ws_ypixel: 0,
+    };
+    let openpty_result =
+        openpty(Some(&winsize), None).context("failed to create pseudo-terminal for aria2c")?;
+    let master = openpty_result.master;
+    let slave = openpty_result.slave;
+    let slave_fd = slave.as_raw_fd();
+
+    let mut command = build_aria2_tui_command(torrent, config);
+    command.stdin(Stdio::null());
+    command.stdout(Stdio::null());
+    command.stderr(Stdio::null());
+    unsafe {
+        command.pre_exec(move || {
+            for stdfd in [libc::STDIN_FILENO, libc::STDOUT_FILENO, libc::STDERR_FILENO] {
+                if libc::dup2(slave_fd, stdfd) == -1 {
+                    return Err(io::Error::last_os_error());
+                }
+            }
+            if slave_fd > 2 {
+                let _ = libc::close(slave_fd);
+            }
+            Ok(())
+        });
+    }
+
+    let child = command.spawn().context("failed to start aria2c")?;
+    drop(slave);
+
+    let master_file = File::from(master);
+    let (sender, receiver) = mpsc::channel();
+    spawn_reader(master_file, sender, "");
+
+    Ok((child, receiver))
+}
+
+#[cfg(not(unix))]
+fn spawn_aria2_cli_piped(
+    torrent: &Torrent,
+    config: &Aria2Config,
+) -> Result<(Child, Receiver<DownloadEvent>)> {
     let mut command = build_aria2_tui_command(torrent, config);
 
     let mut child = command.spawn().context("failed to start aria2c")?;
@@ -1157,7 +1274,7 @@ fn build_aria2_tui_command(torrent: &Torrent, config: &Aria2Config) -> Command {
     command.stdout(Stdio::piped());
     command.stderr(Stdio::piped());
     command.arg("--seed-time=0");
-    command.arg("--summary-interval=5");
+    command.arg("--summary-interval=1");
     command.arg("--show-console-readout=true");
     command.arg("--truncate-console-readout=false");
     command.arg("--download-result=hide");
@@ -1444,6 +1561,55 @@ fn parse_aria2_size_to_bytes(value: &str) -> Option<u64> {
     Some((amount * multiplier).round() as u64)
 }
 
+fn measure_download_bytes(download_dir: &Path, torrent_name: &str) -> u64 {
+    let direct = download_dir.join(torrent_name);
+    if direct.is_file() {
+        return direct.metadata().map(|meta| meta.len()).unwrap_or(0);
+    }
+
+    let nested = download_dir.join(torrent_name);
+    if nested.is_dir() {
+        return directory_file_bytes(&nested);
+    }
+
+    let Ok(entries) = std::fs::read_dir(download_dir) else {
+        return 0;
+    };
+
+    let mut total = 0_u64;
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let name = file_name.to_string_lossy();
+        if name.ends_with(".aria2") {
+            continue;
+        }
+        if name == torrent_name || name.starts_with(&format!("{torrent_name}.")) {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    total += meta.len();
+                } else if meta.is_dir() {
+                    total += directory_file_bytes(&entry.path());
+                }
+            }
+        }
+    }
+
+    total
+}
+
+fn directory_file_bytes(path: &Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(path) else {
+        return 0;
+    };
+
+    entries
+        .flatten()
+        .filter_map(|entry| entry.metadata().ok())
+        .filter(|meta| meta.is_file())
+        .map(|meta| meta.len())
+        .sum()
+}
+
 fn truncate_middle(value: &str, max_chars: usize) -> String {
     let chars: Vec<char> = value.chars().collect();
     if chars.len() <= max_chars {
@@ -1614,7 +1780,7 @@ mod tests {
             .map(|arg| arg.to_string_lossy().into_owned())
             .collect();
 
-        assert!(args.iter().any(|arg| arg == "--summary-interval=5"));
+        assert!(args.iter().any(|arg| arg == "--summary-interval=1"));
         assert!(args.iter().any(|arg| arg == "--bt-max-peers=30"));
         assert!(args.iter().any(|arg| arg == "--file-allocation=none"));
     }
@@ -1650,6 +1816,7 @@ mod tests {
             started_at: Instant::now(),
             outcome: None,
             history_synced: false,
+            last_byte_sample: None,
         }
     }
 
