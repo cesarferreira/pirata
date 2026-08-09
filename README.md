@@ -1,8 +1,29 @@
-# pirata
+<div align="center">
+  <h1>pirata</h1>
 
-![pirata screenshot](assets/screenshot.png)
+  <p><strong>A torrent CLI with a TUI-first search and download flow.</strong></p>
 
-A torrent CLI with a TUI-first flow.
+  <p>
+    <a href="https://crates.io/crates/pirata"><img alt="Crates.io" src="https://img.shields.io/crates/v/pirata"></a>
+    <img alt="License" src="https://img.shields.io/badge/license-MIT-green">
+  </p>
+
+  <p>
+    <a href="#build">Build</a>
+    &nbsp;·&nbsp;
+    <a href="#setup">Setup</a>
+    &nbsp;·&nbsp;
+    <a href="#tui">TUI</a>
+    &nbsp;·&nbsp;
+    <a href="#fast-paths">Fast paths</a>
+  </p>
+
+  <br>
+
+  <img src="assets/screenshot.png" width="880" alt="pirata TUI">
+</div>
+
+---
 
 ## Fast Paths
 
