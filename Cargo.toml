@@ -2,6 +2,14 @@
 name = "pirata"
 version = "0.1.0"
 edition = "2024"
+description = "Torrent CLI with a TUI-first search and download flow"
+license = "MIT"
+authors = ["Cesar Ferreira"]
+repository = "https://github.com/cesarferreira/pirata"
+homepage = "https://github.com/cesarferreira/pirata"
+readme = "README.md"
+keywords = ["torrent", "tui", "cli", "aria2"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0"
