@@ -22,7 +22,9 @@ use ratatui::widgets::{Block, Borders, List, ListItem, ListState, Paragraph};
 use crate::config::{Aria2Config, TransmissionConfig};
 use crate::history::{DownloadHistory, DownloadHistoryEntry};
 use crate::model::{Torrent, TrackedDownload};
-use crate::state::{DetachedDownloadRecord, load_recent_detached_downloads, record_detached_download};
+use crate::state::{
+    DetachedDownloadRecord, load_recent_detached_downloads, record_detached_download,
+};
 use crate::util::{ensure_aria2_available, ensure_transmission_cli_available, format_size};
 
 const MAX_LOG_LINES: usize = 14;
@@ -35,6 +37,7 @@ pub fn run_search_tui<F>(
     history_entries: Vec<DownloadHistoryEntry>,
     history_path: PathBuf,
     search: F,
+    trending: impl FnMut() -> Result<Vec<Torrent>>,
     hydrate: impl FnMut(Torrent) -> Result<Torrent>,
 ) -> Result<()>
 where
@@ -49,6 +52,7 @@ where
         history_entries,
         history_path,
         search,
+        trending,
         hydrate,
     )?;
     let run_result = app.run(&mut terminal);
@@ -121,15 +125,18 @@ impl TuiDownloader {
     }
 }
 
-struct SearchTui<F, H>
+struct SearchTui<F, T, H>
 where
     F: FnMut(&str) -> Result<Vec<Torrent>>,
+    T: FnMut() -> Result<Vec<Torrent>>,
     H: FnMut(Torrent) -> Result<Torrent>,
 {
     query_input: String,
     query: Option<String>,
     results: Vec<Torrent>,
+    trending: Vec<Torrent>,
     selected_result: usize,
+    selected_trending: usize,
     selected_download: usize,
     downloads: Vec<DownloadSession>,
     backend: TuiDownloader,
@@ -139,19 +146,22 @@ where
     focus: FocusPane,
     status_message: String,
     search: F,
+    load_trending: T,
     hydrate: H,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum FocusPane {
     Query,
     Results,
+    Trending,
     Downloads,
 }
 
-impl<F, H> SearchTui<F, H>
+impl<F, T, H> SearchTui<F, T, H>
 where
     F: FnMut(&str) -> Result<Vec<Torrent>>,
+    T: FnMut() -> Result<Vec<Torrent>>,
     H: FnMut(Torrent) -> Result<Torrent>,
 {
     fn new(
@@ -160,6 +170,7 @@ where
         history_entries: Vec<DownloadHistoryEntry>,
         history_path: PathBuf,
         search: F,
+        trending: T,
         hydrate: H,
     ) -> Result<Self> {
         let mut downloads: Vec<DownloadSession> = load_recent_detached_downloads(24)?
@@ -179,7 +190,9 @@ where
             query_input: initial_query.unwrap_or_default(),
             query: None,
             results: Vec::new(),
+            trending: Vec::new(),
             selected_result: 0,
+            selected_trending: 0,
             selected_download: 0,
             downloads,
             backend,
@@ -188,11 +201,13 @@ where
             tick: 0,
             focus: FocusPane::Query,
             status_message:
-                "Type a query and press Enter to search. Recent completed and detached downloads appear below."
+                "Loading live trending releases. Type a query and press Enter to search."
                     .to_string(),
             search,
+            load_trending: trending,
             hydrate,
         };
+        app.refresh_trending()?;
         if !app.query_input.trim().is_empty() {
             app.submit_query()?;
         }
@@ -310,11 +325,14 @@ where
             Span::raw(" "),
             focus_badge("results", matches!(self.focus, FocusPane::Results)),
             Span::raw(" "),
+            focus_badge("trending", matches!(self.focus, FocusPane::Trending)),
+            Span::raw(" "),
             focus_badge("downloads", matches!(self.focus, FocusPane::Downloads)),
             Span::raw(format!(
-                "   backend {}   results {}   active {}",
+                "   backend {}   results {}   trending {}   active {}",
                 self.backend.name(),
                 self.results.len(),
+                self.trending.len(),
                 self.active_downloads()
             )),
         ]))
@@ -344,7 +362,7 @@ where
         }
 
         let result_items: Vec<ListItem<'_>> = self
-            .results
+            .visible_results()
             .iter()
             .map(|torrent| {
                 let line = Line::from(vec![
@@ -372,7 +390,12 @@ where
             })
             .collect();
         let results = List::new(result_items)
-            .block(Block::default().borders(Borders::ALL).title("Results"))
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .title(self.results_title())
+                    .border_style(self.results_focus_style()),
+            )
             .highlight_style(
                 Style::default()
                     .fg(Color::Black)
@@ -381,7 +404,8 @@ where
             )
             .highlight_symbol("▌ ");
         let mut results_state = ListState::default();
-        results_state.select((!self.results.is_empty()).then_some(self.selected_result));
+        results_state
+            .select((!self.visible_results().is_empty()).then_some(self.selected_visible_result()));
         frame.render_stateful_widget(results, left[1], &mut results_state);
 
         let download_width = layout[2].width.saturating_sub(2) as usize;
@@ -475,6 +499,13 @@ where
                 ),
                 Span::raw(" search/start  "),
                 Span::styled(
+                    "r",
+                    Style::default()
+                        .fg(Color::Yellow)
+                        .add_modifier(Modifier::BOLD),
+                ),
+                Span::raw(" refresh trending  "),
+                Span::styled(
                     "/",
                     Style::default()
                         .fg(Color::Yellow)
@@ -522,6 +553,10 @@ where
                 self.cycle_focus_reverse();
                 return Ok(());
             }
+            KeyCode::Char('r') if matches!(self.focus, FocusPane::Trending) => {
+                self.refresh_trending()?;
+                return Ok(());
+            }
             KeyCode::Char('/') => {
                 if matches!(self.focus, FocusPane::Query) {
                     return self.handle_query_key(key);
@@ -548,6 +583,7 @@ where
         match self.focus {
             FocusPane::Query => self.handle_query_key(key),
             FocusPane::Results => self.handle_results_key(key),
+            FocusPane::Trending => self.handle_trending_key(key),
             FocusPane::Downloads => self.handle_downloads_key(key),
         }
     }
@@ -581,16 +617,30 @@ where
             }
             KeyCode::Enter => {
                 if let Some(torrent) = self.results.get(self.selected_result).cloned() {
-                    let torrent = (self.hydrate)(torrent)?;
-                    self.downloads
-                        .push(DownloadSession::start(torrent.clone(), &self.backend)?);
-                    self.selected_download = self.downloads.len().saturating_sub(1);
-                    self.focus = FocusPane::Downloads;
-                    self.status_message = format!(
-                        "Started '{}' with {}. Search again while it runs.",
-                        torrent.name,
-                        self.backend.name()
-                    );
+                    self.start_download(torrent)?;
+                }
+            }
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn handle_trending_key(&mut self, key: KeyCode) -> Result<()> {
+        match key {
+            KeyCode::Up | KeyCode::Char('k') => {
+                if self.selected_trending > 0 {
+                    self.selected_trending -= 1;
+                }
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                if self.selected_trending + 1 < self.trending.len() {
+                    self.selected_trending += 1;
+                }
+            }
+            KeyCode::Enter => {
+                if let Some(torrent) = self.trending.get(self.selected_trending).cloned() {
+                    self.start_download(torrent)?;
                 }
             }
             _ => {}
@@ -657,10 +707,48 @@ where
         Ok(())
     }
 
+    fn refresh_trending(&mut self) -> Result<()> {
+        self.status_message = "Refreshing live trending releases...".to_string();
+        match (self.load_trending)() {
+            Ok(trending) => {
+                self.trending = trending;
+                self.selected_trending = 0;
+                self.status_message = if self.trending.is_empty() {
+                    "No live trending releases are available right now.".to_string()
+                } else {
+                    format!(
+                        "Loaded {} live trending release(s). Press Tab to browse them; r refreshes.",
+                        self.trending.len()
+                    )
+                };
+            }
+            Err(error) => {
+                self.status_message =
+                    format!("Could not refresh Trending Today: {error}. Press r to retry.");
+            }
+        }
+        Ok(())
+    }
+
+    fn start_download(&mut self, torrent: Torrent) -> Result<()> {
+        let torrent = (self.hydrate)(torrent)?;
+        self.downloads
+            .push(DownloadSession::start(torrent.clone(), &self.backend)?);
+        self.selected_download = self.downloads.len().saturating_sub(1);
+        self.focus = FocusPane::Downloads;
+        self.status_message = format!(
+            "Started '{}' with {}. Search or browse trending while it runs.",
+            torrent.name,
+            self.backend.name()
+        );
+        Ok(())
+    }
+
     fn cycle_focus(&mut self) {
         self.focus = match self.focus {
             FocusPane::Query => FocusPane::Results,
-            FocusPane::Results => FocusPane::Downloads,
+            FocusPane::Results => FocusPane::Trending,
+            FocusPane::Trending => FocusPane::Downloads,
             FocusPane::Downloads => FocusPane::Query,
         };
     }
@@ -669,7 +757,8 @@ where
         self.focus = match self.focus {
             FocusPane::Query => FocusPane::Downloads,
             FocusPane::Results => FocusPane::Query,
-            FocusPane::Downloads => FocusPane::Results,
+            FocusPane::Trending => FocusPane::Results,
+            FocusPane::Downloads => FocusPane::Trending,
         };
     }
 
@@ -708,6 +797,39 @@ where
         }
     }
 
+    fn visible_results(&self) -> &[Torrent] {
+        if matches!(self.focus, FocusPane::Trending) {
+            &self.trending
+        } else {
+            &self.results
+        }
+    }
+
+    fn selected_visible_result(&self) -> usize {
+        if matches!(self.focus, FocusPane::Trending) {
+            self.selected_trending
+        } else {
+            self.selected_result
+        }
+    }
+
+    fn results_title(&self) -> &'static str {
+        if matches!(self.focus, FocusPane::Trending) {
+            "Trending Today · Live"
+        } else {
+            "Results"
+        }
+    }
+
+    fn results_focus_style(&self) -> Style {
+        if matches!(self.focus, FocusPane::Results | FocusPane::Trending) {
+            Style::default()
+                .fg(Color::Cyan)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(Color::DarkGray)
+        }
+    }
 }
 
 struct DownloadSession {
@@ -875,7 +997,10 @@ impl DownloadSession {
         }
 
         let ratio = (bytes as f64 / self.torrent.size_bytes as f64).clamp(0.0, 1.0);
-        if self.progress.is_some_and(|current| current >= ratio - 0.001) {
+        if self
+            .progress
+            .is_some_and(|current| current >= ratio - 0.001)
+        {
             return;
         }
 
@@ -967,11 +1092,7 @@ impl DownloadSession {
             let suffix_len = char_len(&suffix);
             if budget > suffix_len + 8 {
                 let title_len = budget - suffix_len;
-                return format!(
-                    "{}{}",
-                    truncate_end(&self.torrent.name, title_len),
-                    suffix
-                );
+                return format!("{}{}", truncate_end(&self.torrent.name, title_len), suffix);
             }
         }
 
@@ -1802,7 +1923,11 @@ fn measure_download_bytes(download_dir: &Path, torrent_name: &str) -> u64 {
         return total;
     }
 
-    for entry in std::fs::read_dir(download_dir).into_iter().flatten().flatten() {
+    for entry in std::fs::read_dir(download_dir)
+        .into_iter()
+        .flatten()
+        .flatten()
+    {
         let path = entry.path();
         if !path.is_file() {
             continue;
@@ -1920,10 +2045,10 @@ mod tests {
     use crate::model::Torrent;
 
     use super::{
-        DownloadSession, DownloadTracking, SessionBackend, TICK_RATE, build_aria2_tui_command,
-        calculate_size_ratio, compact_transfer_status, drain_output_chunk,
-        format_elapsed_duration, parse_aria2_context_line, parse_aria2_progress_line,
-        parse_transmission_progress, resolve_aria2_eta, Aria2ContextLine,
+        Aria2ContextLine, DownloadSession, DownloadTracking, FocusPane, SearchTui, SessionBackend,
+        TICK_RATE, build_aria2_tui_command, calculate_size_ratio, compact_transfer_status,
+        drain_output_chunk, format_elapsed_duration, parse_aria2_context_line,
+        parse_aria2_progress_line, parse_transmission_progress, resolve_aria2_eta,
     };
 
     #[test]
@@ -1982,7 +2107,6 @@ mod tests {
         assert_eq!(download.status_badge().content.as_ref(), " meta ");
         assert_eq!(download.status_badge().content.as_ref(), " meta ");
 
-
         download.progress = Some(0.425);
 
         assert_eq!(download.status_badge().content.as_ref(), " 42.5%");
@@ -2007,6 +2131,28 @@ mod tests {
     #[test]
     fn tui_tick_rate_is_throttled_to_avoid_busy_redraws() {
         assert!(TICK_RATE >= Duration::from_millis(200));
+    }
+
+    #[test]
+    fn loads_and_focuses_live_trending_view() {
+        let trending_torrent = test_torrent("Trending example");
+        let mut tui = SearchTui::new(
+            None,
+            super::TuiDownloader::Aria2(Aria2Config { download_dir: None }),
+            Vec::new(),
+            PathBuf::from("/tmp/pirata-tui-test-history.json"),
+            |_| Ok(Vec::new()),
+            || Ok(vec![trending_torrent.clone()]),
+            Ok,
+        )
+        .expect("TUI should initialize");
+
+        assert_eq!(tui.trending.len(), 1);
+        assert_eq!(tui.results_title(), "Results");
+        tui.cycle_focus();
+        tui.cycle_focus();
+        assert_eq!(tui.focus, FocusPane::Trending);
+        assert_eq!(tui.results_title(), "Trending Today · Live");
     }
 
     #[test]
