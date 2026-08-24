@@ -324,6 +324,19 @@ impl App {
             .map_err(|_| anyhow!("search thread panicked"))?
         };
 
+        let trending_app = app.clone();
+        let trending_handle = tokio::runtime::Handle::current();
+        let trending = move || -> Result<Vec<Torrent>> {
+            let app = trending_app.clone();
+            let handle = trending_handle.clone();
+
+            std::thread::spawn(move || {
+                handle.block_on(async move { app.indexer(indexer_kind)?.trending(limit).await })
+            })
+            .join()
+            .map_err(|_| anyhow!("trending thread panicked"))?
+        };
+
         let hydrate_app = app.clone();
         let hydrate_handle = tokio::runtime::Handle::current();
         let hydrate = move |torrent: Torrent| -> Result<Torrent> {
@@ -361,6 +374,7 @@ impl App {
             history_entries,
             self.config.history_path()?,
             search,
+            trending,
             hydrate,
         )
     }
