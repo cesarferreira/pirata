@@ -14,7 +14,7 @@ use crate::util::{
 
 const API_BASE: &str = "https://apibay.org";
 const HTML_BASE: &str = "https://thepiratebay.org";
-const TRENDING_TODAY_PATH: &str = "/precompiled/data_top100_recent.json";
+const POPULAR_48H_PATH: &str = "/precompiled/data_top100_48h.json";
 
 #[derive(Debug, Clone)]
 pub struct PirateBayIndexer {
@@ -107,7 +107,7 @@ impl Indexer for PirateBayIndexer {
     async fn trending(&self, limit: usize) -> Result<Vec<Torrent>> {
         let response = self
             .client
-            .get(format!("{API_BASE}{TRENDING_TODAY_PATH}"))
+            .get(format!("{API_BASE}{POPULAR_48H_PATH}"))
             .send()
             .await?
             .error_for_status()?;
@@ -224,10 +224,10 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::ApiTorrent;
+    use super::{ApiTorrent, POPULAR_48H_PATH};
 
     #[test]
-    fn parses_trending_today_payload() {
+    fn parses_48_hour_popular_payload() {
         let item: ApiTorrent = serde_json::from_str(
             r#"{
                 "id": 84216239,
@@ -248,5 +248,10 @@ mod tests {
         assert_eq!(item.name, "Example release");
         assert_eq!(item.seeders, 1);
         assert_eq!(item.size_bytes, 14_463_932_136);
+    }
+
+    #[test]
+    fn uses_the_48_hour_popular_feed() {
+        assert_eq!(POPULAR_48H_PATH, "/precompiled/data_top100_48h.json");
     }
 }

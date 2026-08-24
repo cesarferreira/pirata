@@ -201,7 +201,7 @@ where
             tick: 0,
             focus: FocusPane::Query,
             status_message:
-                "Loading live trending releases. Type a query and press Enter to search."
+                "Loading popular releases from the last 48 hours. Type a query and press Enter to search."
                     .to_string(),
             search,
             load_trending: trending,
@@ -708,23 +708,24 @@ where
     }
 
     fn refresh_trending(&mut self) -> Result<()> {
-        self.status_message = "Refreshing live trending releases...".to_string();
+        self.status_message = "Refreshing popular releases from the last 48 hours...".to_string();
         match (self.load_trending)() {
             Ok(trending) => {
                 self.trending = trending;
                 self.selected_trending = 0;
                 self.status_message = if self.trending.is_empty() {
-                    "No live trending releases are available right now.".to_string()
+                    "No popular releases from the last 48 hours are available right now."
+                        .to_string()
                 } else {
                     format!(
-                        "Loaded {} live trending release(s). Press Tab to browse them; r refreshes.",
+                        "Loaded {} popular release(s) from the last 48 hours. Press Tab to browse them; r refreshes.",
                         self.trending.len()
                     )
                 };
             }
             Err(error) => {
                 self.status_message =
-                    format!("Could not refresh Trending Today: {error}. Press r to retry.");
+                    format!("Could not refresh Popular Now: {error}. Press r to retry.");
             }
         }
         Ok(())
@@ -737,7 +738,7 @@ where
         self.selected_download = self.downloads.len().saturating_sub(1);
         self.focus = FocusPane::Downloads;
         self.status_message = format!(
-            "Started '{}' with {}. Search or browse trending while it runs.",
+            "Started '{}' with {}. Search or browse popular releases while it runs.",
             torrent.name,
             self.backend.name()
         );
@@ -815,7 +816,7 @@ where
 
     fn results_title(&self) -> &'static str {
         if matches!(self.focus, FocusPane::Trending) {
-            "Trending Today · Live"
+            "Popular Now · Last 48h"
         } else {
             "Results"
         }
@@ -2037,12 +2038,14 @@ fn format_elapsed_duration(duration: Duration) -> String {
 
 #[cfg(test)]
 mod tests {
+    use std::cell::Cell;
     use std::collections::VecDeque;
     use std::path::PathBuf;
     use std::time::{Duration, Instant};
 
     use crate::config::Aria2Config;
     use crate::model::Torrent;
+    use crossterm::event::KeyCode;
 
     use super::{
         Aria2ContextLine, DownloadSession, DownloadTracking, FocusPane, SearchTui, SessionBackend,
@@ -2152,7 +2155,32 @@ mod tests {
         tui.cycle_focus();
         tui.cycle_focus();
         assert_eq!(tui.focus, FocusPane::Trending);
-        assert_eq!(tui.results_title(), "Trending Today · Live");
+        assert_eq!(tui.results_title(), "Popular Now · Last 48h");
+    }
+
+    #[test]
+    fn enter_on_an_empty_query_does_not_run_a_search() {
+        let search_calls = Cell::new(0);
+        let mut tui = SearchTui::new(
+            None,
+            super::TuiDownloader::Aria2(Aria2Config { download_dir: None }),
+            Vec::new(),
+            PathBuf::from("/tmp/pirata-tui-test-history.json"),
+            |_| {
+                search_calls.set(search_calls.get() + 1);
+                Ok(Vec::new())
+            },
+            || Ok(Vec::new()),
+            Ok,
+        )
+        .expect("TUI should initialize");
+
+        tui.handle_key(KeyCode::Enter)
+            .expect("empty query should be handled");
+
+        assert_eq!(search_calls.get(), 0);
+        assert_eq!(tui.focus, FocusPane::Query);
+        assert_eq!(tui.status_message, "Enter a query before searching.");
     }
 
     #[test]

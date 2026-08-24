@@ -71,7 +71,7 @@ pirata --json doctor
 
 ## TUI
 
-Full-screen search, live Trending Today releases, and download activity:
+Full-screen search, popular releases from the last 48 hours, and download activity:
 
 ```bash
 pirata
@@ -84,10 +84,10 @@ Downloads started inside the TUI show live progress and can run in parallel. Com
 
 Keys:
 
-- `Tab`: cycle focus between query, results, Trending Today, and downloads
+- `Tab`: cycle focus between query, results, Popular Now, and downloads
 - `Up` / `Down` or `j` / `k`: move
 - `Enter`: search or start selected download
-- `r`: refresh the live Trending Today view
+- `r`: refresh the live Popular Now view
 - `/`: start a fresh search
 - `d`: abort selected managed download
 - `q` or `Esc`: stop active foreground downloads and quit
