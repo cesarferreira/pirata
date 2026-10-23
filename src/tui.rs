@@ -7,7 +7,10 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{
+    self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, KeyboardEnhancementFlags,
+    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
+};
 use crossterm::execute;
 use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
@@ -70,6 +73,13 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
     enable_raw_mode().context("failed to enable raw mode")?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen).context("failed to enter alternate screen")?;
+    if crossterm::terminal::supports_keyboard_enhancement().unwrap_or(false) {
+        execute!(
+            stdout,
+            PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
+        )
+        .context("failed to enable enhanced keyboard input")?;
+    }
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend).context("failed to initialize terminal")?;
     terminal.hide_cursor().context("failed to hide cursor")?;
@@ -79,8 +89,12 @@ fn setup_terminal() -> Result<Terminal<CrosstermBackend<io::Stdout>>> {
 
 fn restore_terminal(terminal: &mut Terminal<CrosstermBackend<io::Stdout>>) -> Result<()> {
     disable_raw_mode().context("failed to disable raw mode")?;
-    execute!(terminal.backend_mut(), LeaveAlternateScreen)
-        .context("failed to leave alternate screen")?;
+    execute!(
+        terminal.backend_mut(),
+        PopKeyboardEnhancementFlags,
+        LeaveAlternateScreen
+    )
+    .context("failed to leave alternate screen")?;
     terminal.show_cursor().context("failed to show cursor")?;
     Ok(())
 }
@@ -237,7 +251,7 @@ where
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
-                self.handle_key(key.code)?;
+                self.handle_key(key)?;
             }
         }
 
@@ -321,13 +335,16 @@ where
                     .add_modifier(Modifier::BOLD),
             ),
             Span::raw("  "),
-            focus_badge("query", matches!(self.focus, FocusPane::Query)),
+            focus_badge("search Alt+1", matches!(self.focus, FocusPane::Query)),
             Span::raw(" "),
-            focus_badge("results", matches!(self.focus, FocusPane::Results)),
+            focus_badge("results Alt+2", matches!(self.focus, FocusPane::Results)),
             Span::raw(" "),
-            focus_badge("trending", matches!(self.focus, FocusPane::Trending)),
+            focus_badge(
+                "downloads Alt+3",
+                matches!(self.focus, FocusPane::Downloads),
+            ),
             Span::raw(" "),
-            focus_badge("downloads", matches!(self.focus, FocusPane::Downloads)),
+            focus_badge("trending Alt+4", matches!(self.focus, FocusPane::Trending)),
             Span::raw(format!(
                 "   backend {}   results {}   trending {}   active {}",
                 self.backend.name(),
@@ -543,8 +560,34 @@ where
         frame.render_widget(footer, layout[3]);
     }
 
-    fn handle_key(&mut self, key: KeyCode) -> Result<()> {
+    fn handle_key(&mut self, event: KeyEvent) -> Result<()> {
+        if event.modifiers.contains(KeyModifiers::ALT) {
+            let pane = match event.code {
+                KeyCode::Char('1') => Some(FocusPane::Query),
+                KeyCode::Char('2') => Some(FocusPane::Results),
+                KeyCode::Char('3') => Some(FocusPane::Downloads),
+                KeyCode::Char('4') => Some(FocusPane::Trending),
+                _ => None,
+            };
+            if let Some(pane) = pane {
+                self.focus = pane;
+            }
+            return Ok(());
+        }
+        if event.modifiers.contains(KeyModifiers::CONTROL) {
+            return Ok(());
+        }
+        let key = event.code;
         match key {
+            KeyCode::F(number @ 1..=4) => {
+                self.focus = match number {
+                    1 => FocusPane::Query,
+                    2 => FocusPane::Results,
+                    3 => FocusPane::Downloads,
+                    _ => FocusPane::Trending,
+                };
+                return Ok(());
+            }
             KeyCode::Tab => {
                 self.cycle_focus();
                 return Ok(());
@@ -718,7 +761,7 @@ where
                         .to_string()
                 } else {
                     format!(
-                        "Loaded {} popular release(s) from the last 48 hours. Press Tab to browse them; r refreshes.",
+                        "Loaded {} popular release(s) from the last 48 hours. Press Alt+4 to browse them; r refreshes.",
                         self.trending.len()
                     )
                 };
@@ -736,7 +779,6 @@ where
         self.downloads
             .push(DownloadSession::start(torrent.clone(), &self.backend)?);
         self.selected_download = self.downloads.len().saturating_sub(1);
-        self.focus = FocusPane::Downloads;
         self.status_message = format!(
             "Started '{}' with {}. Search or browse popular releases while it runs.",
             torrent.name,
@@ -748,18 +790,18 @@ where
     fn cycle_focus(&mut self) {
         self.focus = match self.focus {
             FocusPane::Query => FocusPane::Results,
-            FocusPane::Results => FocusPane::Trending,
-            FocusPane::Trending => FocusPane::Downloads,
-            FocusPane::Downloads => FocusPane::Query,
+            FocusPane::Results => FocusPane::Downloads,
+            FocusPane::Downloads => FocusPane::Trending,
+            FocusPane::Trending => FocusPane::Query,
         };
     }
 
     fn cycle_focus_reverse(&mut self) {
         self.focus = match self.focus {
-            FocusPane::Query => FocusPane::Downloads,
+            FocusPane::Query => FocusPane::Trending,
             FocusPane::Results => FocusPane::Query,
-            FocusPane::Trending => FocusPane::Results,
-            FocusPane::Downloads => FocusPane::Trending,
+            FocusPane::Downloads => FocusPane::Results,
+            FocusPane::Trending => FocusPane::Downloads,
         };
     }
 
@@ -2045,7 +2087,7 @@ mod tests {
 
     use crate::config::Aria2Config;
     use crate::model::Torrent;
-    use crossterm::event::KeyCode;
+    use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
     use super::{
         Aria2ContextLine, DownloadSession, DownloadTracking, FocusPane, SearchTui, SessionBackend,
@@ -2154,8 +2196,62 @@ mod tests {
         assert_eq!(tui.results_title(), "Results");
         tui.cycle_focus();
         tui.cycle_focus();
+        assert_eq!(tui.focus, FocusPane::Downloads);
+        tui.cycle_focus();
         assert_eq!(tui.focus, FocusPane::Trending);
         assert_eq!(tui.results_title(), "Popular Now · Last 48h");
+    }
+
+    #[test]
+    fn numbered_shortcuts_switch_panes_without_editing_the_query() {
+        let mut tui = SearchTui::new(
+            Some("example".to_string()),
+            super::TuiDownloader::Aria2(Aria2Config { download_dir: None }),
+            Vec::new(),
+            PathBuf::from("/tmp/pirata-tui-test-history.json"),
+            |_| Ok(vec![test_torrent("Search example")]),
+            || Ok(vec![test_torrent("Trending example")]),
+            Ok,
+        )
+        .expect("TUI should initialize");
+
+        for (number, pane) in [
+            ('1', FocusPane::Query),
+            ('2', FocusPane::Results),
+            ('3', FocusPane::Downloads),
+            ('4', FocusPane::Trending),
+        ] {
+            tui.handle_key(KeyEvent::new(KeyCode::Char(number), KeyModifiers::ALT))
+                .unwrap();
+            assert_eq!(tui.focus, pane);
+            assert_eq!(tui.query_input, "example");
+        }
+        assert_eq!(tui.visible_results()[0].name, "Trending example");
+        for (number, pane) in [
+            (1, FocusPane::Query),
+            (2, FocusPane::Results),
+            (3, FocusPane::Downloads),
+            (4, FocusPane::Trending),
+        ] {
+            tui.handle_key(KeyCode::F(number).into()).unwrap();
+            assert_eq!(tui.focus, pane);
+            assert_eq!(tui.query_input, "example");
+        }
+
+        tui.handle_key(KeyCode::Tab.into()).unwrap();
+        assert_eq!(tui.focus, FocusPane::Query);
+        tui.handle_key(KeyCode::Char('1').into()).unwrap();
+        assert_eq!(tui.query_input, "example1");
+
+        for pane in [
+            FocusPane::Trending,
+            FocusPane::Downloads,
+            FocusPane::Results,
+            FocusPane::Query,
+        ] {
+            tui.handle_key(KeyCode::BackTab.into()).unwrap();
+            assert_eq!(tui.focus, pane);
+        }
     }
 
     #[test]
@@ -2175,7 +2271,7 @@ mod tests {
         )
         .expect("TUI should initialize");
 
-        tui.handle_key(KeyCode::Enter)
+        tui.handle_key(KeyCode::Enter.into())
             .expect("empty query should be handled");
 
         assert_eq!(search_calls.get(), 0);

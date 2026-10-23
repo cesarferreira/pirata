@@ -331,7 +331,7 @@ impl App {
             let handle = trending_handle.clone();
 
             std::thread::spawn(move || {
-                handle.block_on(async move { app.indexer(indexer_kind)?.trending(limit).await })
+                handle.block_on(async move { app.indexer(indexer_kind)?.trending(100).await })
             })
             .join()
             .map_err(|_| anyhow!("trending thread panicked"))?

@@ -80,11 +80,15 @@ pirata tui ubuntu
 pirata tui "ubuntu 24.04" --sort seeders
 ```
 
-Downloads started inside the TUI show live progress and can run in parallel. Completed downloads are persisted locally and reloaded on the next launch as long as their file or folder still exists on disk.
+Popular Now lists up to 100 releases from the last 48 hours, independently of the search limit.
+
+Downloads started inside the TUI show live progress and can run in parallel. Starting a download keeps focus and selection on the current list so you can start more downloads. Completed downloads are persisted locally and reloaded on the next launch as long as their file or folder still exists on disk.
 
 Keys:
 
-- `Tab`: cycle focus between query, results, Popular Now, and downloads
+- `Alt+1` / `Alt+2` / `Alt+3` / `Alt+4`: focus Search / Results / Downloads / Trending
+- `F1`–`F4`: select the same tabs without a modifier
+- `Tab` / `Shift+Tab`: cycle focus forward / backward in that order
 - `Up` / `Down` or `j` / `k`: move
 - `Enter`: search or start selected download
 - `r`: refresh the live Popular Now view
@@ -92,6 +96,8 @@ Keys:
 - `d`: abort selected managed download
 - `q` or `Esc`: stop active foreground downloads and quit
 - `Q`: stop active foreground downloads and quit
+
+On macOS, Alt is Option. Configure your terminal to send Option as Alt/Esc+ for these shortcuts. F1–F4 (Fn+F1–F4 on some keyboards) and Tab navigation are also available.
 
 ## Search
 
