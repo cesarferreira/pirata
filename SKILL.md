@@ -1,33 +1,33 @@
 ---
-name: pirate-ctl
-description: Use this skill when working on the pirate-ctl Rust CLI. It covers the command surface, repo structure, validation workflow, and the downloader behavior around aria2c, transmission-cli, transmission-remote, transmission-daemon, system magnet opening, doctor, setup, and the ratatui TUI.
+name: pirata
+description: Use this skill when working on the pirata Rust CLI. It covers the command surface, repo structure, validation workflow, and the downloader behavior around librqbit, transmission-cli, transmission-remote, transmission-daemon, system magnet opening, doctor, setup, and the ratatui TUI.
 ---
 
-# pirate-ctl
+# pirata
 
 Use this skill when the task is about changing, debugging, or extending this repository.
 
 ## What This Repo Does
 
-`pirate-ctl` is a Rust CLI for:
+`pirata` is a Rust CLI for:
 
 - torrent search
 - torrent info and magnet extraction
 - add-by-id and lucky selection flows
-- a `tui` command that runs a full-screen picker and foreground `transmission-cli`
+- a full-screen TUI for search, category browse, details, and downloads
 - `doctor` and `setup` commands for local environment/config checks
 - first-run interactive setup when the config file is missing
 
 ## Important Behavior
 
-- `aria2` is the default downloader.
-- Normal CLI download flows (`add`, `lucky`, `search --interactive`) should prefer `aria2c` unless the user explicitly selects another downloader.
+- `librqbit` is the default downloader. It is built in; there is no `aria2c` binary.
+- Existing configs and flags that say `aria2` still select librqbit, and an `[aria2]` table is read as the librqbit download directory.
+- Normal CLI download flows (`add`, `lucky`, `search --interactive`) use librqbit unless the user explicitly selects another downloader.
+- The TUI always downloads with librqbit, even when the configured default is transmission or system.
 - `system` means “hand the magnet to the OS”, which may open the Transmission GUI app.
 - `transmission` means:
   1. use the configured Transmission client mode (`cli`, `rpc`, or `auto`)
   2. `auto` can fall back across CLI and RPC paths
-- The `tui` command uses `transmission-cli` directly and does not use the default downloader or system magnet handler.
-- Missing `aria2c` should produce an install hint instead of a generic spawn failure.
 - Missing `transmission-cli` should produce an install hint instead of a generic spawn failure.
 - Missing config should trigger the setup wizard for normal interactive commands.
 
@@ -35,8 +35,8 @@ Use this skill when the task is about changing, debugging, or extending this rep
 
 - `src/cli.rs`: command definitions and flags
 - `src/app.rs`: command routing and top-level behavior
-- `src/tui.rs`: ratatui UI and foreground transmission-cli flow
-- `src/downloader/aria2.rs`: default aria2 CLI flow
+- `src/tui/`: ratatui search, category, detail, and download UI
+- `src/downloader/librqbit.rs`: default librqbit download flow
 - `src/downloader/transmission.rs`: RPC and CLI fallback logic
 - `src/config.rs`: defaults and config load/save
 - `src/util.rs`: shared helpers, command detection, install hints
@@ -48,7 +48,7 @@ Use this skill when the task is about changing, debugging, or extending this rep
 - Keep README focused on usage, not architecture or implementation notes.
 - When changing CLI behavior, update README examples if the user-visible flow changed.
 - If changing downloader defaults or fallback behavior, think through whether magnets will go to the GUI app or stay in CLI flow.
-- If changing aria2 defaults, keep the TUI caveat clear because the TUI still depends on `transmission-cli`.
+- The TUI downloads with librqbit. Do not send TUI downloads through transmission or the system handler.
 - Keep Debian/Ubuntu compatibility in mind for install hints and executable names.
 
 ## Validation

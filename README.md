@@ -17,10 +17,6 @@
     &nbsp;·&nbsp;
     <a href="#fast-paths">Fast paths</a>
   </p>
-
-  <br>
-
-  <img src="assets/screenshot.png" width="880" alt="pirata TUI">
 </div>
 
 ---
@@ -42,7 +38,7 @@ Short aliases are available for the common commands:
 - `pirata l ...`
 - `pirata t ...`
 
-By default, `search --interactive`, `add`, and `lucky` run `aria2c` in the foreground and wait for the download to finish. If you switch to the `transmission` downloader, those commands use the configured Transmission client instead.
+By default, `search --interactive`, `add`, and `lucky` download with the built-in [librqbit](https://crates.io/crates/librqbit) engine and wait for the download to finish. If you switch to the `transmission` downloader, those commands use the configured Transmission client instead. The full-screen TUI always downloads with librqbit.
 
 ## Build
 
@@ -71,7 +67,7 @@ pirata --json doctor
 
 ## TUI
 
-Full-screen search, popular releases from the last 48 hours, and download activity:
+Full-screen search, category browse, torrent details, and live librqbit downloads:
 
 ```bash
 pirata
@@ -80,24 +76,26 @@ pirata tui ubuntu
 pirata tui "ubuntu 24.04" --sort seeders
 ```
 
-Popular Now lists up to 100 releases from the last 48 hours, independently of the search limit.
+Set the download folder with `pirata setup --download-dir ~/Downloads/torrents`.
 
-Downloads started inside the TUI show live progress and can run in parallel. Starting a download keeps focus and selection on the current list so you can start more downloads. Completed downloads are persisted locally and reloaded on the next launch as long as their file or folder still exists on disk.
+The TUI shows a search bar, category tabs, a results table, a detail popup, and per-torrent progress bars. It lists up to 100 results unless you pass `--limit`. Downloads run in-process with librqbit and can overlap.
 
 Keys:
 
-- `Alt+1` / `Alt+2` / `Alt+3` / `Alt+4`: focus Search / Results / Downloads / Trending
-- `F1`–`F4`: select the same tabs without a modifier
-- `Tab` / `Shift+Tab`: cycle focus forward / backward in that order
-- `Up` / `Down` or `j` / `k`: move
-- `Enter`: search or start selected download
-- `r`: refresh the live Popular Now view
-- `/`: start a fresh search
-- `d`: abort selected managed download
-- `q` or `Esc`: stop active foreground downloads and quit
-- `Q`: stop active foreground downloads and quit
-
-On macOS, Alt is Option. Configure your terminal to send Option as Alt/Esc+ for these shortcuts. F1–F4 (Fn+F1–F4 on some keyboards) and Tab navigation are also available.
+| Key | Action |
+| --- | --- |
+| `/` or `i` | Focus the search box |
+| `Enter` | Run search / open the detail popup |
+| `Esc` | Leave the search box / close a popup |
+| `↑` `↓` or `j` `k` | Move the selection |
+| `PgUp` `PgDn` | Jump by a page |
+| `g` `G` | Jump to top / bottom |
+| `←` `→` or `Tab` | Previous / next category |
+| `d` | Download the selected torrent |
+| `c` or `y` | Copy the magnet link to the clipboard |
+| `r` | Refresh the current view |
+| `?` | Toggle the help popup |
+| `q` | Quit |
 
 ## Search
 
@@ -138,7 +136,9 @@ pirata lucky "ubuntu server 24.04" --min-size 1GB --max-size 5GB
 ```text
 --json
 --indexer piratebay
---downloader transmission|qbittorrent|aria2|system
+--downloader transmission|qbittorrent|librqbit|system
+
+`aria2` is still accepted as an alias for `librqbit`, including in existing config files.
 --config ~/.config/pirata/config.toml
 --open
 ```

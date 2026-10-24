@@ -39,7 +39,7 @@ pub async fn run_setup_wizard(
     }
 
     let mode_items = [
-        "Aria2 CLI (Recommended)",
+        "Built-in librqbit (Recommended)",
         "Transmission CLI",
         "Transmission RPC / daemon",
         "Transmission auto fallback",
@@ -50,7 +50,7 @@ pub async fn run_setup_wizard(
         .items(mode_items)
         .default(
             match (config.defaults.downloader, config.transmission.client) {
-                (DownloaderKind::Aria2, _) => 0,
+                (DownloaderKind::Librqbit, _) => 0,
                 (DownloaderKind::Transmission, TransmissionClient::Cli) => 1,
                 (DownloaderKind::Transmission, TransmissionClient::Rpc) => 2,
                 (DownloaderKind::Transmission, TransmissionClient::Auto) => 3,
@@ -62,7 +62,7 @@ pub async fn run_setup_wizard(
 
     match selected_mode {
         0 => {
-            config.defaults.downloader = DownloaderKind::Aria2;
+            config.defaults.downloader = DownloaderKind::Librqbit;
         }
         1 => {
             config.defaults.downloader = DownloaderKind::Transmission;
@@ -88,22 +88,25 @@ pub async fn run_setup_wizard(
             .as_ref()
             .map(|value| value.display().to_string())
             .or_else(|| match config.defaults.downloader {
-                DownloaderKind::Aria2 => config.aria2.download_dir.clone(),
+                DownloaderKind::Librqbit => config.librqbit.download_dir.clone(),
                 DownloaderKind::Transmission => config.transmission.download_dir.clone(),
                 _ => None,
             })
             .unwrap_or_default();
         let download_dir: String = Input::with_theme(&theme)
             .with_prompt(match config.defaults.downloader {
-                DownloaderKind::Aria2 => "Download directory",
+                DownloaderKind::Librqbit => "Download directory",
                 _ => "Download directory (leave blank to keep client default)",
             })
             .default(current_download_dir)
-            .allow_empty(!matches!(config.defaults.downloader, DownloaderKind::Aria2))
+            .allow_empty(!matches!(
+                config.defaults.downloader,
+                DownloaderKind::Librqbit
+            ))
             .interact_text()?;
         match config.defaults.downloader {
-            DownloaderKind::Aria2 => {
-                config.aria2.download_dir = Some(download_dir);
+            DownloaderKind::Librqbit => {
+                config.librqbit.download_dir = Some(download_dir);
             }
             DownloaderKind::Transmission => {
                 config.transmission.download_dir =

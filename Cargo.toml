@@ -8,19 +8,21 @@ authors = ["Cesar Ferreira"]
 repository = "https://github.com/cesarferreira/pirata"
 homepage = "https://github.com/cesarferreira/pirata"
 readme = "README.md"
-keywords = ["torrent", "tui", "cli", "aria2"]
+keywords = ["torrent", "tui", "cli", "librqbit"]
 categories = ["command-line-utilities"]
 
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
+chrono = { version = "0.4.22", default-features = false, features = ["std"] }
 clap = { version = "4.5", features = ["derive"] }
 comfy-table = "7.1"
 crossterm = "0.28"
 dialoguer = { version = "0.12", features = ["fuzzy-select"] }
 directories = "6.0"
+human-repr = "1.0"
 indicatif = "0.17"
-nix = { version = "0.31.3", features = ["term"] }
+librqbit = { version = "8.1", default-features = false, features = ["rust-tls"] }
 open = "5.3"
 ratatui = "0.29"
 reqwest = { version = "0.12", default-features = false, features = ["brotli", "deflate", "gzip", "json", "rustls-tls"] }

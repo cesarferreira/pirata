@@ -150,4 +150,17 @@ mod tests {
             Some(Commands::Lucky(args)) if args.query == "ubuntu"
         ));
     }
+
+    #[test]
+    fn accepts_librqbit_and_legacy_aria2_downloader_flag() {
+        use crate::model::DownloaderKind;
+
+        let current = Cli::try_parse_from(["pirata", "--downloader", "librqbit", "doctor"])
+            .expect("librqbit flag");
+        assert_eq!(current.global.downloader, Some(DownloaderKind::Librqbit));
+
+        let legacy = Cli::try_parse_from(["pirata", "--downloader", "aria2", "doctor"])
+            .expect("aria2 alias");
+        assert_eq!(legacy.global.downloader, Some(DownloaderKind::Librqbit));
+    }
 }

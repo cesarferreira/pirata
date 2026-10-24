@@ -27,7 +27,9 @@ pub enum DownloaderKind {
     Transmission,
     Qbittorrent,
     #[default]
-    Aria2,
+    #[serde(alias = "aria2")]
+    #[value(alias = "aria2")]
+    Librqbit,
     System,
 }
 
@@ -36,7 +38,7 @@ impl fmt::Display for DownloaderKind {
         match self {
             Self::Transmission => write!(f, "transmission"),
             Self::Qbittorrent => write!(f, "qbittorrent"),
-            Self::Aria2 => write!(f, "aria2"),
+            Self::Librqbit => write!(f, "librqbit"),
             Self::System => write!(f, "system"),
         }
     }
@@ -98,6 +100,16 @@ impl Torrent {
             Some("vip" | "trusted" | "helper" | "moderator" | "supermod")
         )
     }
+}
+
+pub fn sort_results(mut results: Vec<Torrent>, sort: SearchSort) -> Vec<Torrent> {
+    match sort {
+        SearchSort::Seeders => results.sort_by_key(|torrent| std::cmp::Reverse(torrent.seeders)),
+        SearchSort::Leechers => results.sort_by_key(|torrent| std::cmp::Reverse(torrent.leechers)),
+        SearchSort::Size => results.sort_by_key(|torrent| std::cmp::Reverse(torrent.size_bytes)),
+        SearchSort::Name => results.sort_by_key(|torrent| torrent.name.clone()),
+    }
+    results
 }
 
 pub fn build_magnet_link(info_hash: &str, name: &str) -> String {

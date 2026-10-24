@@ -1,6 +1,7 @@
 use std::path::PathBuf;
+use std::sync::Arc;
 
-use anyhow::{Result, anyhow, bail};
+use anyhow::{Context, Result, anyhow, bail};
 use crossterm::style::Stylize;
 use dialoguer::{FuzzySelect, theme::ColorfulTheme};
 use serde::Serialize;
@@ -9,18 +10,15 @@ use crate::cache::SearchCache;
 use crate::cli::{Cli, Commands, LuckyArgs, SearchArgs, SetupArgs, TuiArgs};
 use crate::config::{AppConfig, TransmissionClient, default_config_path};
 use crate::downloader::Downloader;
-use crate::downloader::aria2::Aria2Downloader;
+use crate::downloader::librqbit::LibrqbitDownloader;
 use crate::downloader::system::SystemDownloader;
 use crate::downloader::transmission::TransmissionDownloader;
 use crate::indexer::Indexer;
 use crate::indexer::pirate_bay::PirateBayIndexer;
-use crate::model::{DownloaderKind, IndexerKind, SearchSort, Torrent};
+use crate::model::{DownloaderKind, IndexerKind, SearchSort, Torrent, sort_results};
 use crate::output::{print_json, print_search_table, print_torrent_info};
 use crate::setup::run_setup_wizard;
-use crate::tui::{TuiDownloader, run_search_tui};
-use crate::util::{
-    aria2_missing_message, command_exists, parse_size_filter, transmission_cli_missing_message,
-};
+use crate::util::{command_exists, parse_size_filter, transmission_cli_missing_message};
 
 #[derive(Debug, Clone)]
 pub struct App {
@@ -119,16 +117,8 @@ impl App {
                 .await
             }
             Commands::Tui(args) => {
-                self.handle_tui(
-                    indexer_kind,
-                    downloader_kind,
-                    cli.global.open,
-                    cli.global.json,
-                    args,
-                    limit,
-                    &cache,
-                )
-                .await
+                self.handle_tui(indexer_kind, cli.global.open, cli.global.json, args, &cache)
+                    .await
             }
             Commands::Doctor => self.handle_doctor(config_path, cli.global.json),
             Commands::Setup(args) => self.handle_setup(config_path, cli.global.json, args).await,
@@ -283,11 +273,9 @@ impl App {
     async fn handle_tui(
         &self,
         indexer_kind: IndexerKind,
-        downloader_kind: DownloaderKind,
         open: bool,
         json: bool,
         args: TuiArgs,
-        default_limit: usize,
         cache: &SearchCache,
     ) -> Result<()> {
         if json {
@@ -297,93 +285,29 @@ impl App {
             bail!("--open is not supported with the tui command");
         }
 
-        let limit = args.limit.unwrap_or(default_limit);
-        let history_entries = crate::history::DownloadHistory::new(self.config.history_path()?)
-            .load_visible()
-            .await?;
-        let app = self.clone();
-        let cache = cache.clone();
-        let handle = tokio::runtime::Handle::current();
-        let sort = args.sort;
-        let search_app = app.clone();
-        let search = move |query: &str| -> Result<Vec<Torrent>> {
-            let app = search_app.clone();
-            let cache = cache.clone();
-            let handle = handle.clone();
-            let query = query.to_string();
+        let output_dir = self
+            .config
+            .librqbit
+            .download_dir_path()
+            .context("unable to determine the librqbit download directory")?;
+        let indexer: Arc<dyn Indexer> = Arc::from(self.indexer(indexer_kind)?);
+        let limit = args.limit.unwrap_or(100);
 
-            std::thread::spawn(move || {
-                handle.block_on(async move {
-                    let results = app
-                        .load_search_results(indexer_kind, &query, limit, &cache)
-                        .await?;
-                    Ok(sort_results(results, sort))
-                })
-            })
-            .join()
-            .map_err(|_| anyhow!("search thread panicked"))?
-        };
-
-        let trending_app = app.clone();
-        let trending_handle = tokio::runtime::Handle::current();
-        let trending = move || -> Result<Vec<Torrent>> {
-            let app = trending_app.clone();
-            let handle = trending_handle.clone();
-
-            std::thread::spawn(move || {
-                handle.block_on(async move { app.indexer(indexer_kind)?.trending(100).await })
-            })
-            .join()
-            .map_err(|_| anyhow!("trending thread panicked"))?
-        };
-
-        let hydrate_app = app.clone();
-        let hydrate_handle = tokio::runtime::Handle::current();
-        let hydrate = move |torrent: Torrent| -> Result<Torrent> {
-            let app = hydrate_app.clone();
-            let handle = hydrate_handle.clone();
-
-            std::thread::spawn(move || {
-                handle.block_on(async move {
-                    app.hydrate_torrent_for_download(indexer_kind, torrent)
-                        .await
-                })
-            })
-            .join()
-            .map_err(|_| anyhow!("hydrate thread panicked"))?
-        };
-
-        let backend = match downloader_kind {
-            DownloaderKind::Transmission => {
-                TuiDownloader::Transmission(self.config.transmission.clone())
-            }
-            DownloaderKind::Aria2 => TuiDownloader::Aria2(self.config.aria2.clone()),
-            DownloaderKind::System => {
-                bail!(
-                    "the tui command does not support the system downloader; choose aria2 or transmission"
-                )
-            }
-            DownloaderKind::Qbittorrent => {
-                bail!("the tui command does not support the qbittorrent downloader yet")
-            }
-        };
-
-        run_search_tui(
+        crate::tui::run(
+            output_dir,
+            indexer,
+            cache.clone(),
             args.query,
-            backend,
-            history_entries,
-            self.config.history_path()?,
-            search,
-            trending,
-            hydrate,
+            limit,
+            args.sort,
         )
+        .await
     }
 
     fn handle_doctor(&self, config_override: Option<PathBuf>, json: bool) -> Result<()> {
         let config_path = config_override.unwrap_or_else(default_config_path);
         let config_exists = config_path.is_file();
         let default_downloader = self.config.defaults.downloader;
-        let aria2_installed = command_exists("aria2c");
         let transmission_cli_installed = command_exists("transmission-cli");
         let transmission_remote_installed = command_exists("transmission-remote");
         let transmission_daemon_installed = command_exists("transmission-daemon");
@@ -403,11 +327,10 @@ impl App {
             download_target: default_download_target_for(&self.config, default_downloader),
             transmission_client: matches!(default_downloader, DownloaderKind::Transmission)
                 .then(|| self.config.transmission.client.to_string()),
-            aria2_installed,
+            librqbit: "built-in".to_string(),
             transmission_cli_installed,
             transmission_remote_installed,
             transmission_daemon_installed,
-            aria2_hint: (!aria2_installed).then_some(aria2_missing_message()),
             transmission_cli_hint: (!transmission_cli_installed)
                 .then_some(transmission_cli_missing_message()),
             gui_warning,
@@ -450,12 +373,8 @@ impl App {
             }
             println!(
                 "{} {}",
-                "aria2c:".bold().blue(),
-                if report.aria2_installed {
-                    "installed".green()
-                } else {
-                    "missing".red()
-                }
+                "librqbit:".bold().blue(),
+                report.librqbit.as_str().green()
             );
             println!(
                 "{} {}",
@@ -484,9 +403,6 @@ impl App {
                     "missing".red()
                 }
             );
-            if let Some(hint) = report.aria2_hint {
-                println!("{} {}", "Hint:".bold().yellow(), hint.as_str().yellow());
-            }
             if let Some(hint) = report.transmission_cli_hint {
                 println!("{} {}", "Hint:".bold().yellow(), hint.as_str().yellow());
             }
@@ -526,9 +442,8 @@ impl App {
                 DownloaderKind::Transmission
             )
             .then(|| setup.config.transmission.client.to_string()),
-            aria2_installed: command_exists("aria2c"),
+            librqbit: "built-in".to_string(),
             transmission_cli_installed: cli_installed,
-            aria2_hint: (!command_exists("aria2c")).then_some(aria2_missing_message()),
             transmission_cli_hint: (!cli_installed).then_some(transmission_cli_missing_message()),
         };
 
@@ -540,9 +455,6 @@ impl App {
             println!("Download target: {}", output.download_target);
             if let Some(transmission_client) = output.transmission_client {
                 println!("Transmission client: {}", transmission_client);
-            }
-            if let Some(hint) = output.aria2_hint {
-                println!("{hint}");
             }
             if let Some(hint) = output.transmission_cli_hint {
                 println!("{hint}");
@@ -611,7 +523,9 @@ impl App {
             DownloaderKind::Transmission => Ok(Box::new(TransmissionDownloader::new(
                 self.config.transmission.clone(),
             )?)),
-            DownloaderKind::Aria2 => Ok(Box::new(Aria2Downloader::new(self.config.aria2.clone()))),
+            DownloaderKind::Librqbit => Ok(Box::new(LibrqbitDownloader::new(
+                self.config.librqbit.clone(),
+            ))),
             DownloaderKind::System => Ok(Box::new(SystemDownloader)),
             DownloaderKind::Qbittorrent => Err(anyhow!("{kind} downloader is not implemented yet")),
         }
@@ -624,7 +538,7 @@ impl App {
             match downloader_kind {
                 DownloaderKind::Transmission => "transmission",
                 DownloaderKind::Qbittorrent => "qbittorrent",
-                DownloaderKind::Aria2 => "aria2",
+                DownloaderKind::Librqbit => "librqbit",
                 DownloaderKind::System => "system handler",
             }
         }
@@ -653,8 +567,8 @@ impl App {
                     format!("Finished processing '{}' via transmission", torrent_name)
                 }
             },
-            DownloaderKind::Aria2 => {
-                format!("Finished download for '{}' via aria2c", torrent_name)
+            DownloaderKind::Librqbit => {
+                format!("Finished download for '{}' via librqbit", torrent_name)
             }
             DownloaderKind::Qbittorrent => {
                 format!(
@@ -673,7 +587,7 @@ impl App {
         }
 
         match downloader_kind {
-            DownloaderKind::Transmission | DownloaderKind::Aria2 => None,
+            DownloaderKind::Transmission | DownloaderKind::Librqbit => None,
             _ => None,
         }
     }
@@ -681,7 +595,7 @@ impl App {
 
 fn default_download_target_for(config: &AppConfig, downloader_kind: DownloaderKind) -> String {
     match downloader_kind {
-        DownloaderKind::Aria2 => config.aria2.download_target_display(),
+        DownloaderKind::Librqbit => config.librqbit.download_target_display(),
         DownloaderKind::Transmission => config.transmission.download_target_display(),
         DownloaderKind::System => "OS / system handler decides".to_string(),
         DownloaderKind::Qbittorrent => "qBittorrent decides".to_string(),
@@ -731,11 +645,10 @@ struct DoctorReport {
     default_downloader: String,
     download_target: String,
     transmission_client: Option<String>,
-    aria2_installed: bool,
+    librqbit: String,
     transmission_cli_installed: bool,
     transmission_remote_installed: bool,
     transmission_daemon_installed: bool,
-    aria2_hint: Option<String>,
     transmission_cli_hint: Option<String>,
     gui_warning: Option<String>,
 }
@@ -746,8 +659,7 @@ struct SetupOutput {
     default_downloader: String,
     download_target: String,
     transmission_client: Option<String>,
-    aria2_installed: bool,
-    aria2_hint: Option<String>,
+    librqbit: String,
     transmission_cli_installed: bool,
     transmission_cli_hint: Option<String>,
 }
@@ -756,16 +668,6 @@ struct SetupOutput {
 struct ScoredTorrent {
     torrent: Torrent,
     score: f64,
-}
-
-fn sort_results(mut results: Vec<Torrent>, sort: SearchSort) -> Vec<Torrent> {
-    match sort {
-        SearchSort::Seeders => results.sort_by(|left, right| right.seeders.cmp(&left.seeders)),
-        SearchSort::Leechers => results.sort_by(|left, right| right.leechers.cmp(&left.leechers)),
-        SearchSort::Size => results.sort_by(|left, right| right.size_bytes.cmp(&left.size_bytes)),
-        SearchSort::Name => results.sort_by(|left, right| left.name.cmp(&right.name)),
-    }
-    results
 }
 
 fn score_torrent(torrent: &Torrent) -> f64 {

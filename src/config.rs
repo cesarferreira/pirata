@@ -15,8 +15,8 @@ use crate::model::{DownloaderKind, IndexerKind};
 pub struct AppConfig {
     #[serde(default)]
     pub defaults: DefaultsConfig,
-    #[serde(default)]
-    pub aria2: Aria2Config,
+    #[serde(default, alias = "aria2")]
+    pub librqbit: LibrqbitConfig,
     #[serde(default)]
     pub transmission: TransmissionConfig,
     #[serde(default)]
@@ -44,11 +44,11 @@ impl Default for DefaultsConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Aria2Config {
+pub struct LibrqbitConfig {
     pub download_dir: Option<String>,
 }
 
-impl Default for Aria2Config {
+impl Default for LibrqbitConfig {
     fn default() -> Self {
         Self {
             download_dir: default_user_download_dir(),
@@ -56,7 +56,7 @@ impl Default for Aria2Config {
     }
 }
 
-impl Aria2Config {
+impl LibrqbitConfig {
     pub fn download_target_display(&self) -> String {
         self.download_dir
             .clone()
@@ -183,7 +183,7 @@ fn default_indexer() -> IndexerKind {
 }
 
 fn default_downloader() -> DownloaderKind {
-    DownloaderKind::Aria2
+    DownloaderKind::Librqbit
 }
 
 fn default_limit() -> usize {
@@ -305,10 +305,30 @@ mod tests {
     use crate::model::DownloaderKind;
 
     #[test]
-    fn defaults_to_aria2_downloader() {
+    fn defaults_to_librqbit_downloader() {
         let config = AppConfig::default();
 
-        assert_eq!(config.defaults.downloader, DownloaderKind::Aria2);
+        assert_eq!(config.defaults.downloader, DownloaderKind::Librqbit);
+    }
+
+    #[test]
+    fn accepts_legacy_aria2_config() {
+        let config: AppConfig = toml::from_str(
+            r#"
+            [defaults]
+            downloader = "aria2"
+
+            [aria2]
+            download_dir = "/tmp/torrents"
+            "#,
+        )
+        .expect("legacy config should parse");
+
+        assert_eq!(config.defaults.downloader, DownloaderKind::Librqbit);
+        assert_eq!(
+            config.librqbit.download_dir.as_deref(),
+            Some("/tmp/torrents")
+        );
     }
 
     #[test]
