@@ -61,27 +61,6 @@ pub fn render(frame: &mut Frame, app: &mut App) {
 }
 
 fn render_header(frame: &mut Frame, app: &App, area: Rect) {
-    let cols = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Length(22), Constraint::Min(20)])
-        .split(area);
-
-    let logo = Paragraph::new(Line::from(vec![
-        Span::styled(
-            " ☠ ",
-            Style::default().fg(PRIMARY).add_modifier(Modifier::BOLD),
-        ),
-        Span::styled("PIRATA", Style::default().fg(ACCENT).bold()),
-        Span::styled(" ⛵", Style::default().fg(SKY)),
-    ]))
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .border_type(BorderType::Rounded)
-            .border_style(Style::default().fg(BROWN)),
-    );
-    frame.render_widget(logo, cols[0]);
-
     let editing = app.input_mode == InputMode::Editing;
     let border = if editing { ACCENT } else { MUTED };
     let title = if app.category == Category::All {
@@ -108,12 +87,12 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
             .border_style(Style::default().fg(border))
             .title(Span::styled(title, Style::default().fg(border).bold())),
     );
-    frame.render_widget(search, cols[1]);
+    frame.render_widget(search, area);
 
     if editing {
-        let x = cols[1].x + 4 + app.cursor as u16;
-        let y = cols[1].y + 1;
-        frame.set_cursor_position((x.min(cols[1].x + cols[1].width.saturating_sub(2)), y));
+        let x = area.x + 4 + app.cursor as u16;
+        let y = area.y + 1;
+        frame.set_cursor_position((x.min(area.x + area.width.saturating_sub(2)), y));
     }
 }
 

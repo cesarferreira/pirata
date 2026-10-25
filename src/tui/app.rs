@@ -723,7 +723,8 @@ mod tests {
             .iter()
             .map(|cell| cell.symbol())
             .collect();
-        assert!(view.contains("PIRATA"), "{view}");
+        assert!(!view.contains("PIRATA"), "{view}");
+        assert!(view.contains("Search"), "{view}");
         assert!(view.contains("Categories"), "{view}");
         assert!(view.contains("Results"), "{view}");
         assert!(view.contains("No torrents"), "{view}");
