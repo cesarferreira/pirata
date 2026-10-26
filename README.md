@@ -78,7 +78,7 @@ pirata tui "ubuntu 24.04" --sort seeders
 
 Set the download folder with `pirata setup --download-dir ~/Downloads/torrents`.
 
-The TUI shows a search bar, category tabs, a results table, a detail popup, and per-torrent progress bars. It lists up to 100 results unless you pass `--limit`. Downloads run in-process with librqbit and can overlap.
+The TUI opens on Search. It shows a search bar, a Search / Trending switch, category tabs, a results table, a detail popup, and per-torrent progress bars. Press `t` for Trending, the top releases from the last 48 hours. Categories stay on their own row and only filter search. It lists up to 100 results unless you pass `--limit`. Downloads run in-process with librqbit and can overlap.
 
 Keys:
 
@@ -90,6 +90,7 @@ Keys:
 | `↑` `↓` or `j` `k` | Move the selection |
 | `PgUp` `PgDn` | Jump by a page |
 | `g` `G` | Jump to top / bottom |
+| `t` | Switch between Search and Trending |
 | `←` `→` or `Tab` | Previous / next category |
 | `d` | Download the selected torrent |
 | `c` or `y` | Copy the magnet link to the clipboard |

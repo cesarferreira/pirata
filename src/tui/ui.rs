@@ -8,7 +8,7 @@ use ratatui::widgets::{
     Block, BorderType, Borders, Cell, Clear, Gauge, Paragraph, Row, Table, Wrap,
 };
 
-use super::app::{App, Category, InputMode, category_label};
+use super::app::{App, Category, InputMode, View, category_label};
 
 // Dark-canvas palette: teal primary, cyan secondary, purple accent, green
 // highlight, orange link, sky blue, red error, light-gray muted. Borders keep
@@ -38,6 +38,7 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         .constraints([
             Constraint::Length(3),
             Constraint::Length(3),
+            Constraint::Length(3),
             Constraint::Min(5),
             Constraint::Length(dl_height),
             Constraint::Length(1),
@@ -45,12 +46,13 @@ pub fn render(frame: &mut Frame, app: &mut App) {
         .split(frame.area());
 
     render_header(frame, app, chunks[0]);
-    render_tabs(frame, app, chunks[1]);
-    render_results(frame, app, chunks[2]);
+    render_view_tabs(frame, app, chunks[1]);
+    render_tabs(frame, app, chunks[2]);
+    render_results(frame, app, chunks[3]);
     if has_downloads {
-        render_downloads(frame, app, chunks[3]);
+        render_downloads(frame, app, chunks[4]);
     }
-    render_footer(frame, app, chunks[4]);
+    render_footer(frame, app, chunks[5]);
 
     if app.show_detail {
         render_detail(frame, app);
@@ -96,7 +98,36 @@ fn render_header(frame: &mut Frame, app: &App, area: Rect) {
     }
 }
 
+fn render_view_tabs(frame: &mut Frame, app: &App, area: Rect) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(BROWN))
+        .title(Span::styled(" View ", Style::default().fg(SKY).bold()));
+    let inner = block.inner(area);
+    frame.render_widget(block, area);
+
+    let mut spans: Vec<Span> = Vec::new();
+    for (index, view) in View::ORDER.iter().enumerate() {
+        if index > 0 {
+            spans.push(Span::styled("  ", Style::default().fg(MUTED)));
+        }
+        let selected = *view == app.view;
+        let style = if selected {
+            Style::default()
+                .fg(Color::Black)
+                .bg(SKY)
+                .add_modifier(Modifier::BOLD)
+        } else {
+            Style::default().fg(TEXT)
+        };
+        spans.push(Span::styled(format!(" {} ", view.title()), style));
+    }
+    frame.render_widget(Paragraph::new(Line::from(spans)), inner);
+}
+
 fn render_tabs(frame: &mut Frame, app: &App, area: Rect) {
+    let categories_apply = app.view == View::Search;
     let block = Block::default()
         .borders(Borders::ALL)
         .border_type(BorderType::Rounded)
@@ -113,14 +144,16 @@ fn render_tabs(frame: &mut Frame, app: &App, area: Rect) {
         if i > 0 {
             spans.push(Span::styled("  ", Style::default().fg(MUTED)));
         }
-        let selected = *cat == app.category;
+        let selected = categories_apply && *cat == app.category;
         let style = if selected {
             Style::default()
                 .fg(Color::Black)
                 .bg(PRIMARY)
                 .add_modifier(Modifier::BOLD)
-        } else {
+        } else if categories_apply {
             Style::default().fg(TEXT)
+        } else {
+            Style::default().fg(MUTED)
         };
         spans.push(Span::styled(format!(" {} ", cat.title()), style));
     }
@@ -131,8 +164,12 @@ fn render_results(frame: &mut Frame, app: &mut App, area: Rect) {
     let title = if app.loading {
         Span::styled(" ⟳ loading… ", Style::default().fg(LINK).bold())
     } else {
+        let label = match app.view {
+            View::Trending => "Trending",
+            View::Search => "Results",
+        };
         Span::styled(
-            format!(" Results ({}) ", app.results.len()),
+            format!(" {label} ({}) ", app.results.len()),
             Style::default().fg(SKY).bold(),
         )
     };
@@ -145,6 +182,8 @@ fn render_results(frame: &mut Frame, app: &mut App, area: Rect) {
     if app.results.is_empty() {
         let msg = if app.loading {
             "Fetching torrents…"
+        } else if app.view == View::Trending {
+            "No popular torrents in the last 48 hours."
         } else {
             "No torrents to show.\n\nPress  /  to search, or  ← →  to browse a category."
         };
@@ -305,6 +344,14 @@ fn render_footer(frame: &mut Frame, app: &App, area: Rect) {
     } else {
         spans.extend(hint("↑↓/jk", "move"));
         spans.extend(hint("←→", "category"));
+        spans.extend(hint(
+            "t",
+            if app.view == View::Trending {
+                "search"
+            } else {
+                "trending"
+            },
+        ));
         spans.extend(hint("/", "search"));
         spans.extend(hint("d", "download"));
         spans.extend(hint("c", "copy magnet"));
@@ -436,6 +483,7 @@ fn render_help(frame: &mut Frame) {
         key("↑ ↓  j k", "move selection"),
         key("PgUp PgDn", "jump by a page"),
         key("g  G", "jump to top / bottom"),
+        key("t", "switch Search / Trending"),
         key("← →", "previous / next category"),
         key("d", "download the selected torrent"),
         key("c  or  y", "copy magnet link to clipboard"),

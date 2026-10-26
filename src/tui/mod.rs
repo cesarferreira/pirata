@@ -20,7 +20,7 @@ use crate::cache::SearchCache;
 use crate::indexer::Indexer;
 use crate::model::SearchSort;
 
-use app::{App, InputMode, Msg};
+use app::{App, InputMode, Msg, View};
 
 /// Launch the interactive TUI. Downloads are written to `output_dir`.
 pub async fn run(
@@ -57,7 +57,7 @@ pub async fn run(
         tx,
         initial_query,
     );
-    if app.has_initial_query() {
+    if !app.query.trim().is_empty() {
         app.fetch();
     }
 
@@ -67,8 +67,8 @@ pub async fn run(
         while let Some(msg) = rx.recv().await {
             match msg {
                 Msg::Term(event) => handle_term(&mut app, event),
-                Msg::Results(generation, category, res) => {
-                    app.apply_results(generation, category, res)
+                Msg::Results(generation, view, category, res) => {
+                    app.apply_results(generation, view, category, res)
                 }
                 Msg::DlProgress {
                     id,
@@ -137,6 +137,7 @@ fn handle_term(app: &mut App, event: Event) {
             KeyCode::Esc => app.input_mode = InputMode::Normal,
             KeyCode::Enter => {
                 app.input_mode = InputMode::Normal;
+                app.view = View::Search;
                 app.category = app::Category::All;
                 app.fetch();
             }
@@ -172,6 +173,7 @@ fn handle_term(app: &mut App, event: Event) {
             KeyCode::Left | KeyCode::BackTab | KeyCode::Char('h') => app.next_category(-1),
             KeyCode::Char('d') => app.download_selected(),
             KeyCode::Char('c') | KeyCode::Char('y') => app.copy_magnet(),
+            KeyCode::Char('t') => app.toggle_view(),
             KeyCode::Char('r') => app.fetch(),
             KeyCode::Enter => {
                 if app.selected().is_some() {

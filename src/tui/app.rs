@@ -76,6 +76,24 @@ impl Category {
     }
 }
 
+/// Search results and the 48-hour popular list are separate from category tabs.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum View {
+    Search,
+    Trending,
+}
+
+impl View {
+    pub const ORDER: [View; 2] = [View::Search, View::Trending];
+
+    pub fn title(self) -> &'static str {
+        match self {
+            View::Search => "Search",
+            View::Trending => "Trending",
+        }
+    }
+}
+
 /// Map a torrent's numeric category code to a short icon + label for display.
 pub fn category_label(code: &str) -> (&'static str, &'static str) {
     match code.chars().next() {
@@ -110,8 +128,8 @@ pub struct Download {
 /// async fetch / download tasks.
 pub enum Msg {
     Term(Event),
-    /// Results for request `generation` in `category`. Stale generations are dropped.
-    Results(u64, Category, Result<Vec<Torrent>, String>),
+    /// Results for request `generation`. Stale generations are dropped.
+    Results(u64, View, Category, Result<Vec<Torrent>, String>),
     DlProgress {
         id: String,
         name: String,
@@ -139,6 +157,7 @@ pub struct App {
     /// Cursor position within `query`, measured in characters (0..=char_count).
     pub cursor: usize,
     pub input_mode: InputMode,
+    pub view: View,
     pub category: Category,
 
     pub results: Vec<Torrent>,
@@ -169,11 +188,7 @@ impl App {
     ) -> Self {
         let query = initial_query.unwrap_or_default();
         let cursor = query.chars().count();
-        let input_mode = if query.trim().is_empty() {
-            InputMode::Editing
-        } else {
-            InputMode::Normal
-        };
+        let has_query = !query.trim().is_empty();
         Self {
             indexer,
             cache,
@@ -184,7 +199,12 @@ impl App {
             tx,
             query,
             cursor,
-            input_mode,
+            input_mode: if has_query {
+                InputMode::Normal
+            } else {
+                InputMode::Editing
+            },
+            view: View::Search,
             category: Category::All,
             results: Vec::new(),
             table_state: TableState::default(),
@@ -196,10 +216,6 @@ impl App {
             show_help: false,
             should_quit: false,
         }
-    }
-
-    pub fn has_initial_query(&self) -> bool {
-        !self.query.trim().is_empty()
     }
 
     fn cursor_byte(&self) -> usize {
@@ -302,7 +318,26 @@ impl App {
     pub fn fetch(&mut self) {
         self.generation += 1;
         let generation = self.generation;
+        let view = self.view;
         let category = self.category;
+        let indexer = Arc::clone(&self.indexer);
+        let cache = self.cache.clone();
+        let tx = self.tx.clone();
+        let limit = self.limit;
+        let sort = self.sort;
+
+        if view == View::Trending {
+            self.loading = true;
+            self.status = "Loading popular torrents from the last 48 hours…".into();
+            tokio::spawn(async move {
+                let res = load_trending(indexer, cache, limit, sort)
+                    .await
+                    .map_err(|error| error.to_string());
+                let _ = tx.send(Msg::Results(generation, view, category, res));
+            });
+            return;
+        }
+
         let Some(query) = category.search_query(&self.query) else {
             self.results.clear();
             self.table_state.select(None);
@@ -316,18 +351,11 @@ impl App {
             Category::All => format!("Searching for \"{query}\"…"),
             other => format!("Browsing {}…", other.title()),
         };
-
-        let indexer = Arc::clone(&self.indexer);
-        let cache = self.cache.clone();
-        let tx = self.tx.clone();
-        let limit = self.limit;
-        let sort = self.sort;
-
         tokio::spawn(async move {
             let res = load_results(indexer, cache, &query, limit, sort)
                 .await
                 .map_err(|error| error.to_string());
-            let _ = tx.send(Msg::Results(generation, category, res));
+            let _ = tx.send(Msg::Results(generation, view, category, res));
         });
     }
 
@@ -336,6 +364,7 @@ impl App {
     pub fn apply_results(
         &mut self,
         generation: u64,
+        view: View,
         category: Category,
         res: Result<Vec<Torrent>, String>,
     ) {
@@ -351,14 +380,24 @@ impl App {
                 self.results = torrents;
                 if self.results.is_empty() {
                     self.table_state.select(None);
-                    self.status = "No results found".into();
+                    self.status = match view {
+                        View::Trending => "No popular torrents in the last 48 hours".into(),
+                        View::Search => "No results found".into(),
+                    };
                 } else {
                     self.table_state.select(Some(0));
-                    let scope = match category {
-                        Category::All => format!("\"{}\"", self.query.trim()),
-                        other => other.title().to_string(),
+                    self.status = match view {
+                        View::Trending => {
+                            format!("{} popular in the last 48 hours", self.results.len())
+                        }
+                        View::Search => {
+                            let scope = match category {
+                                Category::All => format!("\"{}\"", self.query.trim()),
+                                other => other.title().to_string(),
+                            };
+                            format!("{} results for {}", self.results.len(), scope)
+                        }
                     };
-                    self.status = format!("{} results for {}", self.results.len(), scope);
                 }
             }
             Err(error) => {
@@ -378,7 +417,20 @@ impl App {
     }
 
     pub fn next_category(&mut self, delta: isize) {
+        if self.view == View::Trending {
+            self.status = "Categories filter search. Press t for the Search tab.".into();
+            return;
+        }
         self.set_category(self.category.cycle(delta));
+    }
+
+    pub fn toggle_view(&mut self) {
+        self.view = match self.view {
+            View::Search => View::Trending,
+            View::Trending => View::Search,
+        };
+        self.input_mode = InputMode::Normal;
+        self.fetch();
     }
 
     /// Start downloading the highlighted torrent, or update the status if it is
@@ -465,6 +517,22 @@ impl App {
             .filter(|download| !download.done && download.error.is_none())
             .count()
     }
+}
+
+async fn load_trending(
+    indexer: Arc<dyn Indexer>,
+    cache: SearchCache,
+    limit: usize,
+    sort: SearchSort,
+) -> Result<Vec<Torrent>> {
+    const KEY: &str = "trending:48h";
+    if let Ok(Some(results)) = cache.get(KEY, limit).await {
+        return Ok(sort_results(results, sort));
+    }
+
+    let results = indexer.trending(limit).await?;
+    let _ = cache.put(KEY, limit, &results).await;
+    Ok(sort_results(results, sort))
 }
 
 async fn load_results(
@@ -570,7 +638,7 @@ mod tests {
     fn apply_results_populates_and_selects_first() {
         let mut app = test_app();
         let rows = vec![torrent("1", "First", "200"), torrent("2", "Second", "200")];
-        app.apply_results(app.generation, Category::Video, Ok(rows));
+        app.apply_results(app.generation, View::Search, Category::Video, Ok(rows));
         assert_eq!(app.results.len(), 2);
         assert_eq!(app.table_state.selected(), Some(0));
         assert!(app.status.contains("2 results for Video"));
@@ -582,6 +650,7 @@ mod tests {
         let mut app = test_app();
         app.apply_results(
             app.generation,
+            View::Search,
             Category::All,
             Ok(vec![torrent("0", "No results", "0")]),
         );
@@ -594,14 +663,24 @@ mod tests {
     fn apply_results_ignores_stale_generation() {
         let mut app = test_app();
         app.generation = 5;
-        app.apply_results(4, Category::All, Ok(vec![torrent("1", "Late", "200")]));
+        app.apply_results(
+            4,
+            View::Search,
+            Category::All,
+            Ok(vec![torrent("1", "Late", "200")]),
+        );
         assert!(app.results.is_empty());
     }
 
     #[test]
     fn apply_results_surfaces_errors() {
         let mut app = test_app();
-        app.apply_results(app.generation, Category::All, Err("boom".into()));
+        app.apply_results(
+            app.generation,
+            View::Search,
+            Category::All,
+            Err("boom".into()),
+        );
         assert!(app.results.is_empty());
         assert!(app.status.starts_with("Error:"));
     }
@@ -612,7 +691,7 @@ mod tests {
         let rows = (0..3)
             .map(|i| torrent(&i.to_string(), "T", "200"))
             .collect();
-        app.apply_results(app.generation, Category::Video, Ok(rows));
+        app.apply_results(app.generation, View::Search, Category::Video, Ok(rows));
 
         app.select_next();
         app.select_next();
@@ -634,6 +713,7 @@ mod tests {
         let mut app = test_app();
         app.apply_results(
             app.generation,
+            View::Search,
             Category::Video,
             Ok(vec![torrent("1", "Movie", "200")]),
         );
@@ -725,8 +805,29 @@ mod tests {
             .collect();
         assert!(!view.contains("PIRATA"), "{view}");
         assert!(view.contains("Search"), "{view}");
+        assert!(view.contains("Trending"), "{view}");
         assert!(view.contains("Categories"), "{view}");
-        assert!(view.contains("Results"), "{view}");
-        assert!(view.contains("No torrents"), "{view}");
+        assert!(view.contains("Audio"), "{view}");
+    }
+
+    #[test]
+    fn trending_stays_off_the_category_tabs() {
+        let mut app = test_app();
+        assert_eq!(app.view, View::Search);
+        app.view = View::Trending;
+        assert_eq!(app.category, Category::All);
+
+        app.apply_results(
+            app.generation,
+            View::Trending,
+            Category::All,
+            Ok(vec![torrent("9", "Popular", "200")]),
+        );
+        assert!(app.status.contains("popular in the last 48 hours"));
+
+        app.next_category(1);
+        assert_eq!(app.category, Category::All);
+        assert_eq!(app.view, View::Trending);
+        assert!(app.status.contains("Press t"));
     }
 }
