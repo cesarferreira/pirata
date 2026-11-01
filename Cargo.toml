@@ -20,6 +20,7 @@ comfy-table = "7.1"
 crossterm = "0.28"
 dialoguer = { version = "0.12", features = ["fuzzy-select"] }
 directories = "6.0"
+fs2 = "0.4"
 human-repr = "1.0"
 indicatif = "0.17"
 librqbit = { version = "8.1", default-features = false, features = ["rust-tls"] }
@@ -29,7 +30,9 @@ reqwest = { version = "0.12", default-features = false, features = ["brotli", "d
 scraper = "0.24"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+same-file = "1.0"
 sha1 = "0.10"
-tokio = { version = "1.45", features = ["fs", "macros", "net", "process", "rt-multi-thread", "time"] }
+tempfile = "3.20"
+tokio = { version = "1.45", features = ["fs", "io-util", "macros", "net", "process", "rt-multi-thread", "signal", "time"] }
 toml = "0.8"
 urlencoding = "2.1"

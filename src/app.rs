@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use anyhow::{Context, Result, anyhow, bail};
+use anyhow::{Result, anyhow, bail};
 use crossterm::style::Stylize;
 use dialoguer::{FuzzySelect, theme::ColorfulTheme};
 use serde::Serialize;
@@ -13,6 +13,7 @@ use crate::downloader::Downloader;
 use crate::downloader::librqbit::LibrqbitDownloader;
 use crate::downloader::system::SystemDownloader;
 use crate::downloader::transmission::TransmissionDownloader;
+use crate::downloads::{DownloadLayout, DownloadManager};
 use crate::indexer::Indexer;
 use crate::indexer::pirate_bay::PirateBayIndexer;
 use crate::model::{DownloaderKind, IndexerKind, SearchSort, Torrent, sort_results};
@@ -120,11 +121,22 @@ impl App {
                 self.handle_tui(indexer_kind, cli.global.open, cli.global.json, args, &cache)
                     .await
             }
+            Commands::Resume => {
+                if cli.global.json || cli.global.open {
+                    bail!("--json and --open are not supported with resume");
+                }
+                crate::downloader::librqbit::resume(
+                    &self.config.librqbit,
+                    self.config.downloads.clone(),
+                )
+                .await
+            }
             Commands::Doctor => self.handle_doctor(config_path, cli.global.json),
             Commands::Setup(args) => self.handle_setup(config_path, cli.global.json, args).await,
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle_search(
         &self,
         indexer_kind: IndexerKind,
@@ -192,6 +204,7 @@ impl App {
         Ok(())
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle_lucky(
         &self,
         indexer_kind: IndexerKind,
@@ -285,16 +298,13 @@ impl App {
             bail!("--open is not supported with the tui command");
         }
 
-        let output_dir = self
-            .config
-            .librqbit
-            .download_dir_path()
-            .context("unable to determine the librqbit download directory")?;
+        let manager =
+            DownloadManager::new(&self.config.librqbit, self.config.downloads.clone()).await?;
         let indexer: Arc<dyn Indexer> = Arc::from(self.indexer(indexer_kind)?);
         let limit = args.limit.unwrap_or(100);
 
-        crate::tui::run(
-            output_dir,
+        crate::tui::run_with_manager(
+            manager,
             indexer,
             cache.clone(),
             args.query,
@@ -314,6 +324,7 @@ impl App {
         let gui_warning = matches!(default_downloader, DownloaderKind::System).then_some(
             "default downloader is system; add/lucky/search --interactive will hand magnets to the OS and may open the Transmission GUI".to_string(),
         );
+        let layout = DownloadLayout::resolve(&self.config.librqbit, &self.config.downloads).ok();
 
         let report = DoctorReport {
             config_path: config_path.display().to_string(),
@@ -334,6 +345,12 @@ impl App {
             transmission_cli_hint: (!transmission_cli_installed)
                 .then_some(transmission_cli_missing_message()),
             gui_warning,
+            incomplete_dir: layout
+                .as_ref()
+                .map(|layout| layout.incomplete.display().to_string()),
+            completed_dir: layout
+                .as_ref()
+                .map(|layout| layout.completed.display().to_string()),
         };
 
         if json {
@@ -364,6 +381,12 @@ impl App {
                 "Download target:".bold().blue(),
                 report.download_target.as_str().white()
             );
+            if let Some(path) = &report.incomplete_dir {
+                println!("{} {}", "Built-in incomplete:".bold().blue(), path);
+            }
+            if let Some(path) = &report.completed_dir {
+                println!("{} {}", "Built-in completed:".bold().blue(), path);
+            }
             if let Some(transmission_client) = &report.transmission_client {
                 println!(
                     "{} {}",
@@ -453,6 +476,12 @@ impl App {
             println!("Wrote config to {}", output.config_path);
             println!("Default downloader set to {}", output.default_downloader);
             println!("Download target: {}", output.download_target);
+            if let Ok(layout) =
+                DownloadLayout::resolve(&setup.config.librqbit, &setup.config.downloads)
+            {
+                println!("Built-in incomplete: {}", layout.incomplete.display());
+                println!("Built-in completed: {}", layout.completed.display());
+            }
             if let Some(transmission_client) = output.transmission_client {
                 println!("Transmission client: {}", transmission_client);
             }
@@ -523,8 +552,9 @@ impl App {
             DownloaderKind::Transmission => Ok(Box::new(TransmissionDownloader::new(
                 self.config.transmission.clone(),
             )?)),
-            DownloaderKind::Librqbit => Ok(Box::new(LibrqbitDownloader::new(
+            DownloaderKind::Librqbit => Ok(Box::new(LibrqbitDownloader::with_downloads(
                 self.config.librqbit.clone(),
+                self.config.downloads.clone(),
             ))),
             DownloaderKind::System => Ok(Box::new(SystemDownloader)),
             DownloaderKind::Qbittorrent => Err(anyhow!("{kind} downloader is not implemented yet")),
@@ -651,6 +681,8 @@ struct DoctorReport {
     transmission_daemon_installed: bool,
     transmission_cli_hint: Option<String>,
     gui_warning: Option<String>,
+    incomplete_dir: Option<String>,
+    completed_dir: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

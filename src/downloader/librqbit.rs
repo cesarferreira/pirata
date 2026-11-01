@@ -1,128 +1,142 @@
 use std::path::PathBuf;
 use std::sync::Arc;
-use std::time::Duration;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Result, anyhow, bail};
 use async_trait::async_trait;
-use crossterm::style::Stylize;
-use indicatif::{ProgressBar, ProgressStyle};
-use librqbit::{AddTorrent, AddTorrentOptions, ManagedTorrent, Session};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use tokio::task::JoinSet;
 
-use crate::config::LibrqbitConfig;
+use crate::config::{DownloadsConfig, LibrqbitConfig};
 use crate::downloader::Downloader;
+use crate::downloads::{DownloadManager, DownloadProgress, DownloadRequest};
 use crate::model::Torrent;
 
 #[derive(Debug, Clone)]
 pub struct LibrqbitDownloader {
     config: LibrqbitConfig,
+    downloads: DownloadsConfig,
 }
 
 impl LibrqbitDownloader {
     pub fn new(config: LibrqbitConfig) -> Self {
-        Self { config }
+        Self::with_downloads(config, DownloadsConfig::default())
+    }
+
+    pub fn with_downloads(config: LibrqbitConfig, downloads: DownloadsConfig) -> Self {
+        Self { config, downloads }
     }
 }
 
 #[async_trait]
 impl Downloader for LibrqbitDownloader {
     async fn add_torrent(&self, torrent: &Torrent) -> Result<()> {
-        let output = self
-            .config
-            .download_dir_path()
-            .context("librqbit download directory is not configured")?;
-        download_magnet(&torrent.resolved_magnet(), &torrent.name, output).await
+        run_download(
+            &self.config,
+            self.downloads.clone(),
+            DownloadRequest::from_torrent(torrent),
+        )
+        .await
     }
 
     async fn add_magnet(&self, magnet: &str) -> Result<()> {
-        let output = self
-            .config
-            .download_dir_path()
-            .context("librqbit download directory is not configured")?;
-        download_magnet(magnet, magnet, output).await
+        run_download(
+            &self.config,
+            self.downloads.clone(),
+            DownloadRequest::from_magnet(magnet)?,
+        )
+        .await
     }
 }
 
 pub async fn download_magnet(magnet: &str, name: &str, output: PathBuf) -> Result<()> {
-    tokio::fs::create_dir_all(&output)
-        .await
-        .with_context(|| format!("failed to create {}", output.display()))?;
+    let mut request = DownloadRequest::from_magnet(magnet)?;
+    request.name = name.to_owned();
+    run_download(
+        &LibrqbitConfig {
+            download_dir: Some(output.display().to_string()),
+        },
+        DownloadsConfig::default(),
+        request,
+    )
+    .await
+}
 
-    println!("{} {}", "Download:".bold().cyan(), name.magenta());
-    println!(
-        "{} {}",
-        "Target:".bold().blue(),
-        output.display().to_string().white()
-    );
-
-    let session = Session::new(output)
-        .await
-        .map_err(|error| anyhow!("librqbit session init failed: {error}"))?;
-
-    let handle = add_magnet(&session, magnet).await?;
-    handle
-        .wait_until_initialized()
-        .await
-        .map_err(|error| anyhow!("metadata fetch failed: {error}"))?;
-
-    let progress = make_progress_bar(handle.stats().total_bytes);
-    let progress_handle = Arc::clone(&handle);
-    let progress_bar = progress.clone();
-    let progress_task =
-        tokio::spawn(async move { drive_progress(progress_handle, progress_bar).await });
-
-    let result = handle
-        .wait_until_completed()
-        .await
-        .map_err(|error| anyhow!("download failed: {error}"));
-
-    progress_task.abort();
-    let _ = progress_task.await;
-    if result.is_ok() {
-        progress.finish_with_message("done");
-    }
+async fn run_download(
+    config: &LibrqbitConfig,
+    downloads: DownloadsConfig,
+    request: DownloadRequest,
+) -> Result<()> {
+    let manager = DownloadManager::new(config, downloads).await?;
+    let progress = progress_bar(&request);
+    let result = tokio::select! {
+        result = download_with_progress(manager.clone(), request, progress) => result.map(|_| ()),
+        _ = tokio::signal::ctrl_c() => Err(anyhow!("download paused; run `pirata resume` to continue")),
+    };
+    manager.shutdown().await;
     result
 }
 
-pub async fn add_magnet(session: &Arc<Session>, magnet: &str) -> Result<Arc<ManagedTorrent>> {
-    let options = AddTorrentOptions {
-        overwrite: true,
-        ..Default::default()
-    };
-    session
-        .add_torrent(AddTorrent::from_url(magnet.to_string()), Some(options))
-        .await
-        .map_err(|error| anyhow!("add torrent failed: {error}"))?
-        .into_handle()
-        .ok_or_else(|| anyhow!("librqbit session returned no handle"))
-}
-
-fn make_progress_bar(total: u64) -> ProgressBar {
-    let progress = ProgressBar::new(total.max(1));
-    let template = "  {spinner:.43} [{elapsed_precise:.250}] \
-                    [{bar:32.43/238}] \
-                    {bytes:>10.45}/{total_bytes:.250} \
-                    {bytes_per_sec:>11.215}  ETA {eta:.250}";
-    progress.set_style(
-        ProgressStyle::with_template(template)
-            .unwrap()
-            .progress_chars("━╸ ")
-            .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏"),
-    );
-    progress.enable_steady_tick(Duration::from_millis(100));
-    progress
-}
-
-async fn drive_progress(handle: Arc<ManagedTorrent>, progress: ProgressBar) {
-    let mut interval = tokio::time::interval(Duration::from_millis(500));
-    loop {
-        interval.tick().await;
-        let stats = handle.stats();
-        if stats.total_bytes > 0 && progress.length() != Some(stats.total_bytes) {
-            progress.set_length(stats.total_bytes);
-        }
-        progress.set_position(stats.progress_bytes);
-        if stats.finished {
-            break;
-        }
+pub async fn resume(config: &LibrqbitConfig, downloads: DownloadsConfig) -> Result<()> {
+    let manager = DownloadManager::new(config, downloads).await?;
+    let requests = manager.resumable()?;
+    if requests.is_empty() {
+        println!("No saved downloads to resume.");
+        manager.shutdown().await;
+        return Ok(());
     }
+    let progress = MultiProgress::new();
+    let mut tasks = JoinSet::new();
+    for request in requests {
+        let bar = progress.add(progress_bar(&request));
+        tasks.spawn(download_with_progress(manager.clone(), request, bar));
+    }
+    let result = tokio::select! {
+        result = async {
+            let mut errors = Vec::new();
+            while let Some(result) = tasks.join_next().await {
+                match result {
+                    Ok(Ok(_)) => {}
+                    Ok(Err(error)) => errors.push(format!("{error:#}")),
+                    Err(error) => errors.push(error.to_string()),
+                }
+            }
+            if !errors.is_empty() { bail!("Some downloads could not resume:\n{}", errors.join("\n")); }
+            Ok(())
+        } => result,
+        _ = tokio::signal::ctrl_c() => Err(anyhow!("downloads paused; run `pirata resume` to continue")),
+    };
+    tasks.abort_all();
+    manager.shutdown().await;
+    result
+}
+
+fn progress_bar(request: &DownloadRequest) -> ProgressBar {
+    let bar = ProgressBar::new(request.expected_bytes);
+    bar.set_prefix(request.name.clone());
+    bar.set_style(
+        ProgressStyle::with_template(
+            "{prefix:.cyan} [{wide_bar:.cyan/black}] {bytes}/{total_bytes} {bytes_per_sec} {msg}",
+        )
+        .expect("progress template"),
+    );
+    bar
+}
+
+async fn download_with_progress(
+    manager: Arc<DownloadManager>,
+    request: DownloadRequest,
+    bar: ProgressBar,
+) -> Result<PathBuf> {
+    let result = manager
+        .download(request, |update: DownloadProgress| {
+            bar.set_length(update.total);
+            bar.set_position(update.downloaded);
+            bar.set_message(update.status);
+        })
+        .await;
+    match &result {
+        Ok(path) => bar.finish_with_message(format!("Completed → {}", path.display())),
+        Err(error) => bar.abandon_with_message(format!("{error:#}")),
+    }
+    result
 }

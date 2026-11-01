@@ -18,6 +18,8 @@ pub struct AppConfig {
     #[serde(default, alias = "aria2")]
     pub librqbit: LibrqbitConfig,
     #[serde(default)]
+    pub downloads: DownloadsConfig,
+    #[serde(default)]
     pub transmission: TransmissionConfig,
     #[serde(default)]
     pub cache: CacheConfig,
@@ -46,6 +48,30 @@ impl Default for DefaultsConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LibrqbitConfig {
     pub download_dir: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DownloadsConfig {
+    pub incomplete_dir: Option<PathBuf>,
+    pub completed_dir: Option<PathBuf>,
+    pub min_free_space_bytes: u64,
+    pub min_free_space_percent: u8,
+    pub on_complete: Vec<String>,
+    pub hook_timeout_seconds: u64,
+}
+
+impl Default for DownloadsConfig {
+    fn default() -> Self {
+        Self {
+            incomplete_dir: None,
+            completed_dir: None,
+            min_free_space_bytes: 1024 * 1024 * 1024,
+            min_free_space_percent: 10,
+            on_complete: Vec::new(),
+            hook_timeout_seconds: 60,
+        }
+    }
 }
 
 impl Default for LibrqbitConfig {
@@ -342,5 +368,28 @@ mod tests {
             candidates[1],
             Path::new("/tmp/home/.config/pirate-ctl/config.toml")
         );
+    }
+
+    #[test]
+    fn preserves_download_lifecycle_configuration() {
+        let config: AppConfig = toml::from_str(
+            r#"
+            [downloads]
+            incomplete_dir = "/media/downloading"
+            completed_dir = "/media/ready"
+            min_free_space_bytes = 2097152
+            min_free_space_percent = 15
+            on_complete = ["/usr/local/bin/import-media", "--scan"]
+            hook_timeout_seconds = 30
+            "#,
+        )
+        .expect("parse lifecycle configuration");
+        let saved = serde_json::to_value(config).expect("serialize configuration");
+        assert_eq!(saved["downloads"]["incomplete_dir"], "/media/downloading");
+        assert_eq!(saved["downloads"]["completed_dir"], "/media/ready");
+        assert_eq!(saved["downloads"]["min_free_space_bytes"], 2097152);
+        assert_eq!(saved["downloads"]["min_free_space_percent"], 15);
+        assert_eq!(saved["downloads"]["on_complete"][1], "--scan");
+        assert_eq!(saved["downloads"]["hook_timeout_seconds"], 30);
     }
 }

@@ -95,7 +95,7 @@ pub async fn run_setup_wizard(
             .unwrap_or_default();
         let download_dir: String = Input::with_theme(&theme)
             .with_prompt(match config.defaults.downloader {
-                DownloaderKind::Librqbit => "Download directory",
+                DownloaderKind::Librqbit => "Download root (contains incomplete/ and completed/)",
                 _ => "Download directory (leave blank to keep client default)",
             })
             .default(current_download_dir)

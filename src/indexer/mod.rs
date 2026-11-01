@@ -5,6 +5,7 @@ use crate::model::Torrent;
 
 pub mod pirate_bay;
 
+#[allow(clippy::double_must_use)] // async_trait adds must_use to generated Future methods.
 #[async_trait]
 pub trait Indexer: Send + Sync {
     async fn search(&self, query: &str, limit: usize) -> Result<Vec<Torrent>>;

@@ -2,12 +2,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use librqbit::Session;
 use ratatui::crossterm::event::Event;
 use ratatui::widgets::TableState;
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::cache::SearchCache;
+use crate::downloads::{DownloadManager, DownloadRequest};
 use crate::indexer::Indexer;
 use crate::model::{SearchSort, Torrent, sort_results};
 
@@ -122,6 +122,7 @@ pub struct Download {
     pub speed: f64,
     pub done: bool,
     pub error: Option<String>,
+    pub status: &'static str,
 }
 
 /// Messages funneled into the single event loop from the input thread and the
@@ -142,6 +143,13 @@ pub enum Msg {
         id: String,
         err: String,
     },
+    DlStatus {
+        id: String,
+        status: &'static str,
+    },
+    DlComplete {
+        path: PathBuf,
+    },
 }
 
 pub struct App {
@@ -149,7 +157,7 @@ pub struct App {
     pub cache: SearchCache,
     pub limit: usize,
     pub sort: SearchSort,
-    pub session: Option<Arc<Session>>,
+    pub manager: Option<Arc<DownloadManager>>,
     pub output_dir: PathBuf,
     pub tx: UnboundedSender<Msg>,
 
@@ -181,7 +189,7 @@ impl App {
         cache: SearchCache,
         limit: usize,
         sort: SearchSort,
-        session: Option<Arc<Session>>,
+        manager: Option<Arc<DownloadManager>>,
         output_dir: PathBuf,
         tx: UnboundedSender<Msg>,
         initial_query: Option<String>,
@@ -194,7 +202,7 @@ impl App {
             cache,
             limit,
             sort,
-            session,
+            manager,
             output_dir,
             tx,
             query,
@@ -442,13 +450,17 @@ impl App {
         };
         let id = torrent.id.clone();
         let name = torrent.name.clone();
-        let magnet = torrent.resolved_magnet();
+        let request = DownloadRequest::from_torrent(torrent);
 
-        if self.downloads.contains_key(&id) {
+        if self
+            .downloads
+            .get(&id)
+            .is_some_and(|download| download.error.is_none())
+        {
             self.status = format!("Already downloading: {name}");
             return;
         }
-        let Some(session) = self.session.clone() else {
+        let Some(manager) = self.manager.clone() else {
             self.status = "Torrent session unavailable — cannot download".into();
             return;
         };
@@ -462,10 +474,33 @@ impl App {
                 speed: 0.0,
                 done: false,
                 error: None,
+                status: "Resolving metadata",
             },
         );
         self.status = format!("Downloading → {}", self.output_dir.display());
-        spawn_download(session, magnet, id, name, self.tx.clone());
+        spawn_download(manager, request, self.tx.clone());
+    }
+
+    pub fn resume_downloads(&mut self) -> Result<()> {
+        let Some(manager) = self.manager.clone() else {
+            return Ok(());
+        };
+        for request in manager.resumable()? {
+            self.downloads.insert(
+                request.id.clone(),
+                Download {
+                    name: request.name.clone(),
+                    downloaded: 0,
+                    total: 0,
+                    speed: 0.0,
+                    done: false,
+                    error: None,
+                    status: "Restoring download",
+                },
+            );
+            spawn_download(manager.clone(), request, self.tx.clone());
+        }
+        Ok(())
     }
 
     /// Copy the highlighted torrent's magnet link to the system clipboard.
@@ -497,6 +532,7 @@ impl App {
             speed: 0.0,
             done: false,
             error: None,
+            status: "Downloading",
         });
         entry.downloaded = downloaded;
         entry.total = total;
@@ -808,6 +844,39 @@ mod tests {
         assert!(view.contains("Trending"), "{view}");
         assert!(view.contains("Categories"), "{view}");
         assert!(view.contains("Audio"), "{view}");
+    }
+
+    #[test]
+    fn active_downloads_remain_visible_when_completed_downloads_are_restored() {
+        let mut app = test_app();
+        for index in 0..20 {
+            app.on_progress(
+                format!("done-{index}"),
+                format!("Finished-{index}"),
+                100,
+                100,
+                0.0,
+                true,
+            );
+        }
+        app.on_progress("a".into(), "Downloading-A".into(), 20, 100, 1.0, false);
+        app.on_progress("b".into(), "Downloading-B".into(), 30, 100, 1.0, false);
+        app.on_progress("c".into(), "Downloading-C".into(), 40, 100, 1.0, false);
+        let mut terminal =
+            ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 32)).unwrap();
+        terminal
+            .draw(|frame| super::super::ui::render(frame, &mut app))
+            .unwrap();
+        let view: String = terminal
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|cell| cell.symbol())
+            .collect();
+        assert!(view.contains("Downloading-A"));
+        assert!(view.contains("Downloading-B"));
+        assert!(view.contains("Downloading-C"));
     }
 
     #[test]

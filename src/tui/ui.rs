@@ -281,9 +281,21 @@ fn render_downloads(frame: &mut Frame, app: &App, area: Rect) {
         .constraints(vec![Constraint::Length(1); inner.height as usize])
         .split(inner);
 
-    for (download, row) in app
-        .downloads
-        .values()
+    let mut downloads = app.downloads.values().collect::<Vec<_>>();
+    downloads.sort_by_key(|download| {
+        (
+            if download.error.is_some() {
+                1
+            } else if download.done {
+                2
+            } else {
+                0
+            },
+            download.name.as_str(),
+        )
+    });
+    for (download, row) in downloads
+        .into_iter()
         .take(inner.height as usize)
         .zip(rows.iter())
     {
@@ -299,10 +311,11 @@ fn render_downloads(frame: &mut Frame, app: &App, area: Rect) {
             format!("✓ {name} — complete")
         } else {
             format!(
-                "▼ {name} — {} / {} @ {}",
+                "▼ {name} — {} / {} @ {} · {}",
                 human_bytes(download.downloaded),
                 human_bytes(download.total),
-                download.speed.human_throughput_bytes()
+                download.speed.human_throughput_bytes(),
+                download.status
             )
         };
         let color = if download.error.is_some() {
@@ -314,7 +327,7 @@ fn render_downloads(frame: &mut Frame, app: &App, area: Rect) {
         };
         let gauge = Gauge::default()
             .gauge_style(Style::default().fg(color).bg(SEL_BG))
-            .ratio(if download.error.is_some() { 1.0 } else { ratio })
+            .ratio(ratio)
             .label(Span::styled(
                 label,
                 Style::default()

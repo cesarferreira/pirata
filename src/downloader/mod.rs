@@ -7,6 +7,7 @@ pub mod librqbit;
 pub mod system;
 pub mod transmission;
 
+#[allow(clippy::double_must_use)] // async_trait adds must_use to generated Future methods.
 #[async_trait]
 pub trait Downloader: Send + Sync {
     async fn add_magnet(&self, magnet: &str) -> Result<()>;

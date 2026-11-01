@@ -3,6 +3,7 @@ pub mod cache;
 pub mod cli;
 pub mod config;
 pub mod downloader;
+pub mod downloads;
 pub mod history;
 pub mod indexer;
 pub mod model;

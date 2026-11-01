@@ -12,11 +12,12 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::{Result, anyhow};
-use librqbit::{Session, SessionOptions};
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
 use tokio::sync::mpsc::{self, UnboundedSender};
 
 use crate::cache::SearchCache;
+use crate::config::{DownloadsConfig, LibrqbitConfig};
+use crate::downloads::DownloadManager;
 use crate::indexer::Indexer;
 use crate::model::SearchSort;
 
@@ -31,18 +32,22 @@ pub async fn run(
     limit: usize,
     sort: SearchSort,
 ) -> Result<()> {
-    tokio::fs::create_dir_all(&output_dir).await.ok();
-
-    // A shared torrent session powers every download started from the UI.
-    // Disable DHT/session persistence: a TUI is ephemeral and this avoids
-    // touching on-disk state (and the failures that come with it).
-    let opts = SessionOptions {
-        disable_dht_persistence: true,
-        fastresume: false,
-        persistence: None,
-        ..Default::default()
+    let engine = LibrqbitConfig {
+        download_dir: Some(output_dir.display().to_string()),
     };
-    let session: Option<Arc<Session>> = Session::new_with_opts(output_dir.clone(), opts).await.ok();
+    let manager = DownloadManager::new(&engine, DownloadsConfig::default()).await?;
+    run_with_manager(manager, indexer, cache, initial_query, limit, sort).await
+}
+
+pub async fn run_with_manager(
+    manager: Arc<DownloadManager>,
+    indexer: Arc<dyn Indexer>,
+    cache: SearchCache,
+    initial_query: Option<String>,
+    limit: usize,
+    sort: SearchSort,
+) -> Result<()> {
+    let output_dir = manager.layout().root.clone();
 
     let (tx, mut rx) = mpsc::unbounded_channel::<Msg>();
     spawn_input_thread(tx.clone());
@@ -52,11 +57,15 @@ pub async fn run(
         cache,
         limit,
         sort,
-        session,
+        Some(manager.clone()),
         output_dir,
         tx,
         initial_query,
     );
+    if let Err(error) = app.resume_downloads() {
+        manager.shutdown().await;
+        return Err(error);
+    }
     if !app.query.trim().is_empty() {
         app.fetch();
     }
@@ -79,6 +88,12 @@ pub async fn run(
                     done,
                 } => app.on_progress(id, name, downloaded, total, speed, done),
                 Msg::DlError { id, err } => app.on_download_error(id, err),
+                Msg::DlStatus { id, status } => {
+                    if let Some(download) = app.downloads.get_mut(&id) {
+                        download.status = status;
+                    }
+                }
+                Msg::DlComplete { path } => app.status = format!("Completed → {}", path.display()),
             }
             if app.should_quit {
                 break;
@@ -90,6 +105,7 @@ pub async fn run(
     .await;
 
     ratatui::restore();
+    manager.shutdown().await;
     result.map_err(|error| anyhow!(error))
 }
 

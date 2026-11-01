@@ -38,6 +38,7 @@ test:
 		echo "    cargo install cargo-nextest --locked"; \
 		cargo test; \
 	fi
+	python3 -m unittest discover -s examples -p 'test_*.py'
 
 # Type-check and lint
 #

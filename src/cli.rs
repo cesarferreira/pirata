@@ -45,6 +45,8 @@ pub enum Commands {
     Lucky(LuckyArgs),
     #[command(visible_alias = "t")]
     Tui(TuiArgs),
+    /// Resume saved built-in downloads and retry failed completion hooks.
+    Resume,
     Doctor,
     Setup(SetupArgs),
 }
@@ -107,6 +109,12 @@ mod tests {
     fn parses_no_subcommand_for_default_tui_mode() {
         let cli = Cli::try_parse_from(["pirata"]).expect("cli should parse");
         assert!(cli.command.is_none());
+    }
+
+    #[test]
+    fn parses_resume_command() {
+        let cli = Cli::try_parse_from(["pirata", "resume"]).expect("resume should parse");
+        assert!(matches!(cli.command, Some(Commands::Resume)));
     }
 
     #[test]
