@@ -41,6 +41,14 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
+      - name: Install Windows assembler
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          choco install nasm --yes --no-progress
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "$env:ProgramFiles\NASM" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & "$env:ProgramFiles\NASM\nasm.exe" -v
       - name: Test native target
         run: cargo test --locked --all-targets --target ${{ matrix.target }}
       - name: Build release binary
