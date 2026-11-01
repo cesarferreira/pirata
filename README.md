@@ -43,6 +43,14 @@ By default, `search --interactive`, `add`, and `lucky` download with the built-i
 
 ## Build
 
+Prebuilt Linux binaries are available for x86_64 and ARM64:
+
+```bash
+cargo binstall pirata
+```
+
+To build from this checkout:
+
 ```bash
 cargo install --path .
 pirata --help
