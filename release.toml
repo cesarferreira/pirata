@@ -1,0 +1,7 @@
+allow-branch = ["main"]
+sign-commit = false
+sign-tag = false
+publish = true
+push = true
+tag-name = "v{{version}}"
+pre-release-hook = ["git-cliff", "-o", "CHANGELOG.md", "--tag", "v{{version}}"]

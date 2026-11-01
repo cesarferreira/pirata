@@ -432,7 +432,11 @@ fn link_tree(source: &Path, destination: &Path) -> Result<()> {
             }
             link_tree(&entry.path(), &target)?;
         } else if kind.is_file() {
-            File::open(entry.path())?.sync_all()?;
+            OpenOptions::new()
+                .read(true)
+                .write(true)
+                .open(entry.path())?
+                .sync_all()?;
             match fs::hard_link(entry.path(), &target) {
                 Ok(()) => {}
                 Err(error)

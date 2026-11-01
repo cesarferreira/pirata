@@ -11,6 +11,15 @@ readme = "README.md"
 keywords = ["torrent", "tui", "cli", "librqbit"]
 categories = ["command-line-utilities"]
 
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.tar.gz"
+pkg-fmt = "tgz"
+bin-dir = "{ bin }{ binary-ext }"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-url = "{ repo }/releases/download/v{ version }/{ name }-{ target }.zip"
+pkg-fmt = "zip"
+
 [dependencies]
 anyhow = "1.0"
 async-trait = "0.1"
