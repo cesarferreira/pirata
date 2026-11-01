@@ -9,6 +9,10 @@ All notable changes to this project will be documented in this file.
 - Add live Trending Today view to TUI ([#3](https://github.com/cesarferreira/pirata/issues/3))
 - Add resumable download lifecycle
 
+### 🐛 Bug Fixes
+
+- Install assembler for Windows release builds
+
 ### 💼 Other
 
 - Keep browsing while downloading and improve TUI navigation
@@ -16,9 +20,14 @@ All notable changes to this project will be documented in this file.
 - Tweak
 - Sure thing
 
+### 📚 Documentation
+
+- Add release changelog
+
 ### ⚙️ Miscellaneous Tasks
 
 - Publish prebuilt binaries for supported platforms
+- Limit builds to Linux
 ## [0.1.1] - 2026-08-09
 
 ### 🚀 Features
